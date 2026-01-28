@@ -13,13 +13,20 @@ const Login = () => {
     setLoading(true);
 
     try {
-      const response = await fetch('http://localhost:3000/api/v1/auth/login', {
+      const response = await fetch('http://localhost:3001/api/v1/auth/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ email, password }),
       });
+
+      // Check if response is JSON
+      const contentType = response.headers.get('content-type');
+      if (!contentType || !contentType.includes('application/json')) {
+        const text = await response.text();
+        throw new Error('Backend API is not running or endpoint not found. Please start the backend server.');
+      }
 
       const data = await response.json();
 
@@ -33,12 +40,15 @@ const Login = () => {
         localStorage.setItem('user', JSON.stringify(data.user));
       }
 
-      // Redirect to dashboard or show success
-      alert('Login successful!');
-      console.log('User logged in:', data.user);
+      // Redirect to dashboard
+      window.location.href = '/dashboard';
       
     } catch (err) {
-      setError(err.message || 'An error occurred during login');
+      if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError')) {
+        setError('Cannot connect to server. Please make sure the backend API is running on http://localhost:3000');
+      } else {
+        setError(err.message || 'An error occurred during login');
+      }
     } finally {
       setLoading(false);
     }
