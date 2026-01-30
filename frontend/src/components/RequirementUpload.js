@@ -87,7 +87,17 @@ const RequirementUpload = () => {
         }
 
         const data = await response.json();
-        setSuccess(`File uploaded successfully! Job ID: ${data.jobId}`);
+        if (data.githubUrl) {
+          let message = `File parsed and uploaded to GitHub!\n`;
+          message += `Job ID: ${data.jobId}\n`;
+          if (data.extractedTextLength) {
+            message += `Extracted ${data.extractedTextLength} characters\n`;
+          }
+          message += `View file: ${data.githubUrl}`;
+          setSuccess(message);
+        } else {
+          setSuccess(`File uploaded successfully! Job ID: ${data.jobId}`);
+        }
         setFileName('');
         fileInputRef.current.value = '';
       } else {
@@ -118,7 +128,11 @@ const RequirementUpload = () => {
         }
 
         const data = await response.json();
-        setSuccess(`Text uploaded successfully! Job ID: ${data.jobId}`);
+        if (data.githubUrl) {
+          setSuccess(`Text uploaded to GitHub! Job ID: ${data.jobId}\nView file: ${data.githubUrl}`);
+        } else {
+          setSuccess(`Text uploaded successfully! Job ID: ${data.jobId}`);
+        }
         setPastedText('');
       }
     } catch (err) {
