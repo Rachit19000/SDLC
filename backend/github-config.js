@@ -10,9 +10,16 @@ try {
   // dotenv not installed, continue without it
 }
 
-// GitHub Personal Access Token (from environment or hardcoded for specific user)
+// GitHub Personal Access Token (from environment variable)
 // Get this from: GitHub → Settings → Developer settings → Personal access tokens
-const GITHUB_TOKEN = process.env.GITHUB_TOKEN || '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';
+// Set it in .env file: GITHUB_TOKEN=your_token_here
+const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
+
+if (!GITHUB_TOKEN) {
+  console.error('ERROR: GITHUB_TOKEN environment variable is not set!');
+  console.error('Please create a .env file in the backend folder with: GITHUB_TOKEN=your_token_here');
+  throw new Error('GITHUB_TOKEN is required. Set it in .env file or environment variable.');
+}
 
 // Initialize Octokit
 const octokit = new Octokit({
