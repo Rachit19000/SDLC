@@ -1,5 +1,13 @@
 # AI-Driven SDLC Automation Platform - Design Documentation
 
+## 🆕 Java/Spring Boot Backend Implementation
+
+**NEW:** Complete Java/Spring Boot backend now available!
+
+- **[JAVA_ARCHITECTURE.md](./JAVA_ARCHITECTURE.md)** - Java/Spring Boot architecture details
+- **[NODE_VS_JAVA_COMPARISON.md](./NODE_VS_JAVA_COMPARISON.md)** - Side-by-side Node.js vs Java comparison
+- See `../MIGRATION_GUIDE.md` for migration instructions
+
 ## Overview
 
 This repository contains the complete design documentation for an AI-Driven SDLC Automation Platform. The platform takes raw requirements (PDF/DOCX/TXT) and generates structured SDLC artifacts through an orchestrated AI agent workflow.

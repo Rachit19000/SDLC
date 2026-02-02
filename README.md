@@ -1,225 +1,421 @@
-# AI-Driven SDLC Automation Platform - Design Documentation
+# AI-Driven SDLC Automation Platform
 
-## Overview
-
-This repository contains the complete design documentation for an AI-Driven SDLC Automation Platform. The platform takes raw requirements (PDF/DOCX/TXT) and generates structured SDLC artifacts through an orchestrated AI agent workflow.
-
-## Problem Statement
-
-Build an AI co-pilot for the entire SDLC lifecycle that:
-- Accepts raw requirements (upload or paste)
-- Generates structured artifacts (WBS, User Stories, Tech Specs, etc.)
-- Includes human validation checkpoints after each step
-- Manages versions using GitHub integration
-- Provides real-time progress updates via WebSocket
-- Supports asynchronous processing for long-running AI operations
-
-## Design Documents
-
-All design documents are located in the [`docs/`](./docs/) folder:
-
-### 📖 **Start Here**: [docs/ARCHITECTURE_EXPLAINED.md](./docs/ARCHITECTURE_EXPLAINED.md)
-**Complete explanation in simple language** - This explains the entire architecture and how the solution works in easy-to-understand terms. **Read this first!**
-
-### 📊 **Visual Guide**: [docs/VISUAL_FLOW_DIAGRAM.md](./docs/VISUAL_FLOW_DIAGRAM.md)
-**Step-by-step visual diagrams** - See the complete flow with simple diagrams, timelines, and visual representations.
-
-### Detailed Technical Documents:
-
-### 1. [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md)
-High-level system architecture including:
-- Architecture layers and components
-- Technology stack recommendations
-- Scalability and security considerations
-- Design decisions and rationale
-
-### 2. [docs/API_DESIGN.md](./docs/API_DESIGN.md)
-Complete API specification with:
-- All REST endpoints with request/response formats
-- WebSocket event specifications
-- Authentication and authorization
-- Error handling
-- Rate limiting
-
-### 3. [docs/WORKFLOW_ORCHESTRATION.md](./docs/WORKFLOW_ORCHESTRATION.md)
-Agent orchestration and workflow design:
-- Workflow state machine
-- Agent execution patterns
-- Validation checkpoint flows
-- Version management integration
-- Error handling and retry logic
-
-### 4. [docs/DATA_FLOW.md](./docs/DATA_FLOW.md)
-Data flow and state management:
-- End-to-end data flow diagrams
-- Database schema design
-- Redis state management
-- Version management flows
-- Cache strategies
-
-### 5. [docs/COMPONENT_INTERACTIONS.md](./docs/COMPONENT_INTERACTIONS.md)
-System component interactions:
-- Sequence diagrams
-- Component interaction patterns
-- Deployment architecture
-- Error handling flows
-
-### 6. [docs/IMPLEMENTATION_GUIDE.md](./docs/IMPLEMENTATION_GUIDE.md)
-Implementation roadmap:
-- Phased implementation plan
-- Technology stack details
-- Key implementation decisions
-- Critical API endpoints
-- Security and performance considerations
-
-## Key Features
-
-### Core Functionality
-1. **Requirement Processing**
-   - Upload PDF/DOCX/TXT files
-   - Paste text directly
-   - Extract and parse content
-
-2. **AI-Generated Artifacts**
-   - Work Breakdown Structure (WBS)
-   - User Stories (Epics & Stories)
-   - Technical Specifications
-   - Non-Functional Requirements
-   - Deployment Architecture
-   - Sprint/Release Plan
-   - Functional Test Scenarios
-   - Performance Testing Approach
-   - Workspace Structure
-
-3. **Human Validation**
-   - Checkpoint after each agent
-   - Approve, reject, or modify artifacts
-   - Version tracking for modifications
-
-4. **Version Management**
-   - GitHub integration
-   - Automatic commits on validation
-   - Version history tracking
-   - Latest version retrieval for agents
-
-5. **Real-time Updates**
-   - WebSocket communication
-   - Progress tracking
-   - Status updates
-   - Error notifications
-
-## Architecture Highlights
-
-### System Pattern
-- **Microservices** with event-driven architecture
-- **Asynchronous processing** via job queues
-- **Real-time communication** via WebSocket
-- **Version control** via GitHub API integration
-
-### Key Components
-1. **Frontend**: Next.js with real-time WebSocket updates
-2. **API Gateway**: Authentication, routing, rate limiting
-3. **Orchestrator**: Workflow management and coordination
-4. **Agent Pool**: Specialized AI agents for each artifact type
-5. **Validation Service**: Human validation checkpoints
-6. **Version Manager**: GitHub integration for versioning
-7. **Artifact Manager**: Storage and retrieval of artifacts
-
-### Technology Stack
-- **Frontend**: Next.js 14+, TypeScript, Socket.io-client
-- **Backend**: Node.js/Python, FastAPI/Express
-- **Database**: PostgreSQL (metadata), Redis (queue/cache)
-- **Storage**: S3/MinIO (files)
-- **AI**: OpenAI GPT-4 / Claude 3
-- **Version Control**: GitHub API
-- **Queue**: BullMQ (Node.js) or Celery (Python)
-
-## Workflow Overview
-
-```
-1. User uploads/pastes requirement
-   ↓
-2. Document Parser extracts text
-   ↓
-3. [Human Validation] - Review parsed text
-   ↓
-4. WBS Agent generates Work Breakdown Structure
-   ↓
-5. [Human Validation] - Review/approve WBS
-   ↓
-6. User Stories Agent generates Epics & Stories
-   ↓
-7. [Human Validation] - Review/approve Stories
-   ↓
-8. Tech Spec Agent generates Technical Specs
-   ↓
-9. [Human Validation] - Review/approve Specs
-   ↓
-10. ... (continues for all agents)
-    ↓
-11. Workspace Agent generates structure
-    ↓
-12. [Human Validation] - Final review
-    ↓
-13. Complete - All artifacts ready
-```
-
-## API Call Summary
-
-### Critical Endpoints
-- `POST /requirements/upload` - Upload requirement document
-- `POST /requirements/paste` - Paste requirement text
-- `POST /workflows/start` - Start SDLC workflow
-- `GET /workflows/{id}` - Get workflow status
-- `GET /artifacts/{workflowId}/{type}` - Get artifact
-- `POST /validation/validate` - Validate artifact
-- `GET /version/{workflowId}/latest` - Get latest version
-
-### WebSocket Events
-- `workflow.progress` - Progress updates
-- `workflow.step.complete` - Step completion
-- `workflow.validation.required` - Validation needed
-- `workflow.validation.complete` - Validation done
-- `workflow.complete` - Workflow finished
-- `workflow.error` - Error occurred
-
-## Implementation Phases
-
-1. **Phase 1-2**: Foundation & Infrastructure (Weeks 1-2)
-2. **Phase 3**: Requirement Processing (Week 3)
-3. **Phase 4-5**: Agent Framework (Weeks 4-5)
-4. **Phase 6**: Validation System (Week 6)
-5. **Phase 7-9**: Remaining Agents (Weeks 7-9)
-6. **Phase 10-11**: Integration & Polish (Weeks 10-11)
-7. **Phase 12**: Testing & Deployment (Week 12)
-
-## Design Principles
-
-1. **Asynchronous Processing**: All AI operations are async to handle timeouts
-2. **Human in the Loop**: Validation checkpoint after each agent
-3. **Version Management**: Use GitHub, don't build custom solution
-4. **Real-time Updates**: WebSocket for live progress
-5. **Resilience**: Retry logic, error handling, graceful degradation
-6. **Scalability**: Horizontal scaling, stateless services
-7. **Security**: Authentication, authorization, input validation
-
-## Next Steps
-
-1. Review all design documents in the [`docs/`](./docs/) folder
-2. Set up development environment
-3. Follow [docs/IMPLEMENTATION_GUIDE.md](./docs/IMPLEMENTATION_GUIDE.md) for phased implementation
-4. Start with Phase 1 (Foundation)
-5. Implement incrementally and test thoroughly
-
-## Questions or Issues?
-
-Refer to the specific design documents in the [`docs/`](./docs/) folder for detailed information:
-- Architecture questions → [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md)
-- API questions → [docs/API_DESIGN.md](./docs/API_DESIGN.md)
-- Workflow questions → [docs/WORKFLOW_ORCHESTRATION.md](./docs/WORKFLOW_ORCHESTRATION.md)
-- Data flow questions → [docs/DATA_FLOW.md](./docs/DATA_FLOW.md)
-- Implementation questions → [docs/IMPLEMENTATION_GUIDE.md](./docs/IMPLEMENTATION_GUIDE.md)
+> Transform raw requirements into complete, AI-generated SDLC artifacts with human validation at every step.
 
 ---
 
-**Note**: This is a design document. Implementation should follow the phased approach outlined in the Implementation Guide.
+## Overview
+
+This platform automates the entire Software Development Life Cycle by leveraging AI agents to generate:
+- Work Breakdown Structure (WBS)
+- User Stories & Epics
+- Technical Specifications
+- Non-Functional Requirements (NFRs)
+- Deployment Architecture
+- Sprint/Release Plans
+- Functional Test Scenarios
+- Performance Testing Approaches
+- Workspace Structures for Development
+
+---
+
+## Technology Stack
+
+### Frontend
+- **React 18** - UI framework
+- **React Router v6** - Navigation
+- **CSS3** - Styling
+- **Fetch API** - HTTP client
+
+### Backend (Choose One)
+
+#### Option 1: Node.js (Original)
+- **Node.js** + Express.js
+- **Document Parsing**: pdf-parse, mammoth
+- **GitHub Integration**: @octokit/rest
+
+#### Option 2: Java/Spring Boot (New) ⭐
+- **Java 17** + Spring Boot 3.2.1
+- **Document Parsing**: Apache PDFBox, Apache POI
+- **GitHub Integration**: GitHub API Java
+- **Build Tool**: Maven
+
+### External Services
+- **GitHub** - Version control and file storage
+- **OpenAI/Claude** - AI processing (planned)
+
+---
+
+## Project Structure
+
+```
+SDLC/
+├── frontend/              # React application
+│   ├── src/
+│   │   ├── components/    # Login, RequirementUpload
+│   │   ├── pages/         # Dashboard
+│   │   └── App.js         # Main app with routing
+│   └── package.json
+│
+├── backend/               # Node.js backend (original)
+│   ├── server.js
+│   ├── document-parser.js
+│   ├── github-config.js
+│   └── package.json
+│
+├── backend-java/          # Java/Spring Boot backend (NEW)
+│   ├── src/main/java/com/sdlc/
+│   │   ├── controller/    # REST endpoints
+│   │   ├── service/       # Business logic
+│   │   ├── repository/    # Data access
+│   │   ├── model/         # Entities
+│   │   ├── dto/           # Data transfer objects
+│   │   └── exception/     # Error handling
+│   ├── src/main/resources/
+│   │   └── application.properties
+│   ├── pom.xml
+│   ├── README.md
+│   ├── INSTALLATION.md
+│   └── QUICKSTART.md
+│
+└── docs/                  # Architecture documentation
+    ├── JAVA_ARCHITECTURE.md
+    ├── NODE_VS_JAVA_COMPARISON.md
+    ├── COMPLETE_WORKFLOW.md
+    ├── ARCHITECTURE_EXPLAINED.md
+    ├── VISUAL_FLOW_DIAGRAM.md
+    └── ...
+```
+
+---
+
+## Quick Start
+
+### Prerequisites
+- **Node.js 18+** (for frontend + Node.js backend)
+- **Java 17+** (for Java backend)
+- **Maven 3.6+** (for Java backend)
+- **GitHub Personal Access Token** with `repo` scope
+
+---
+
+### Option A: Run with Java Backend (Recommended)
+
+#### 1. Start Java Backend
+```bash
+# Set GitHub token
+$env:GITHUB_TOKEN="your_github_token_here"
+
+# Build and run
+cd backend-java
+mvn clean install
+mvn spring-boot:run
+```
+
+**Expected output:**
+```
+🚀 SDLC Backend running on http://localhost:3001/api/v1
+```
+
+#### 2. Start Frontend
+```bash
+cd frontend
+npm install
+npm start
+```
+
+**Opens:** http://localhost:3000
+
+#### 3. Login & Upload
+- **Email:** `rachitjainemail@gmail.com`
+- **Password:** `password123`
+- Upload PDF/DOCX/TXT files
+- Extracted text stored in GitHub
+
+---
+
+### Option B: Run with Node.js Backend
+
+#### 1. Start Node.js Backend
+```bash
+# Set GitHub token
+$env:GITHUB_TOKEN="your_github_token_here"
+
+# Install and run
+cd backend
+npm install
+npm start
+```
+
+#### 2. Start Frontend
+```bash
+cd frontend
+npm install
+npm start
+```
+
+---
+
+## Features Implemented
+
+### ✅ Current Features
+- [x] User authentication (mock)
+- [x] Document upload (PDF, DOCX, TXT)
+- [x] Text extraction from documents
+- [x] Text paste interface
+- [x] GitHub storage integration
+- [x] Real-time error handling
+- [x] CORS configuration
+- [x] File size validation (10MB)
+
+### 🚧 In Progress
+- [ ] Database integration (PostgreSQL)
+- [ ] JWT authentication
+- [ ] AI agent orchestration
+- [ ] WebSocket for real-time updates
+- [ ] Redis job queue
+
+### 📋 Planned Features
+- [ ] WBS generation
+- [ ] User stories generation
+- [ ] Technical specs generation
+- [ ] NFR generation
+- [ ] Deployment architecture
+- [ ] Sprint planning
+- [ ] Test case generation
+
+---
+
+## API Endpoints
+
+### Authentication
+- `POST /api/v1/auth/login` - User login
+- `GET /api/v1/auth/health` - Health check
+
+### Requirements
+- `POST /api/v1/requirements/upload` - Upload file (PDF/DOCX/TXT)
+- `POST /api/v1/requirements/paste` - Paste text
+
+---
+
+## Documentation
+
+### Setup Guides
+- **Java Backend**: `backend-java/README.md`, `backend-java/INSTALLATION.md`, `backend-java/QUICKSTART.md`
+- **Node.js Backend**: `backend/README.md`, `backend/GITHUB_SETUP.md`
+- **Migration**: `MIGRATION_GUIDE.md`
+
+### Architecture
+- **Java Architecture**: `docs/JAVA_ARCHITECTURE.md`
+- **Node vs Java**: `docs/NODE_VS_JAVA_COMPARISON.md`
+- **Complete Workflow**: `docs/COMPLETE_WORKFLOW.md`
+- **Architecture Explained**: `docs/ARCHITECTURE_EXPLAINED.md`
+- **Visual Flow**: `docs/VISUAL_FLOW_DIAGRAM.md`
+
+---
+
+## Backend Comparison
+
+| Feature | Node.js | Java/Spring Boot |
+|---------|---------|------------------|
+| **Startup** | Fast (~1s) | Medium (~3-5s) |
+| **Memory** | Low (50-100MB) | Medium (200-300MB) |
+| **Type Safety** | ❌ JavaScript | ✅ Java |
+| **PDF Parsing** | pdf-parse | Apache PDFBox |
+| **Word Parsing** | mammoth | Apache POI |
+| **Concurrency** | Event loop | Thread pool |
+| **Enterprise** | Good | Excellent |
+
+**Recommendation:** Java/Spring Boot for production, Node.js for rapid prototyping.
+
+---
+
+## Workflow
+
+1. **Upload Requirements**
+   - User uploads PDF/DOCX or pastes text
+   - Frontend sends to backend
+
+2. **Parse Document**
+   - Backend extracts clean text
+   - Normalizes formatting
+
+3. **Store in GitHub**
+   - Extracted text committed to repo
+   - `requirements/{userId}/{jobId}/file.txt`
+
+4. **Future: AI Processing**
+   - Text sent to AI agents
+   - Generate SDLC artifacts
+   - Human validation at each step
+
+---
+
+## Environment Variables
+
+```bash
+# GitHub Personal Access Token (required)
+GITHUB_TOKEN=your_github_token_here
+```
+
+Get token from: https://github.com/settings/tokens
+Required scopes: `repo`
+
+---
+
+## GitHub Storage Structure
+
+```
+Rachit19000/files_storage (repository)
+└── requirements/
+    └── user_1/
+        └── job_1738234567890/
+            ├── document_extracted.txt
+            └── requirement_text.txt
+```
+
+---
+
+## Testing
+
+### Test Credentials
+- Email: `rachitjainemail@gmail.com`
+- Password: `password123`
+
+Additional test users:
+- `test@example.com` / `test123`
+- `admin@example.com` / `admin123`
+
+### Test Files
+Upload any:
+- PDF document
+- Word document (.docx)
+- Text file (.txt)
+
+Verify in GitHub: https://github.com/Rachit19000/files_storage
+
+---
+
+## Troubleshooting
+
+### "Backend API is not running"
+- Check backend is started
+- Check port 3001 is not blocked
+- Visit: http://localhost:3001/api/v1/auth/health
+
+### "GITHUB_TOKEN is required" (Java)
+```bash
+$env:GITHUB_TOKEN="your_token_here"
+mvn spring-boot:run
+```
+
+### "Port 3001 already in use"
+- Stop other backend
+- Or change port in config
+
+### "Cannot parse document"
+- Check file type (PDF/DOCX/TXT only)
+- Check file size (max 10MB)
+- Check file is not corrupted
+
+---
+
+## Development
+
+### Frontend Development
+```bash
+cd frontend
+npm start
+# Runs on http://localhost:3000
+```
+
+### Java Backend Development
+```bash
+cd backend-java
+mvn spring-boot:run
+# Runs on http://localhost:3001/api/v1
+```
+
+### Node.js Backend Development
+```bash
+cd backend
+npm start
+# Runs on http://localhost:3001/api/v1
+```
+
+---
+
+## Contributing
+
+1. Choose backend: Java or Node.js
+2. Follow architecture in `docs/`
+3. Test with frontend
+4. Verify GitHub storage
+
+---
+
+## Roadmap
+
+### Phase 1: Foundation ✅
+- [x] Authentication
+- [x] File upload
+- [x] Document parsing
+- [x] GitHub storage
+
+### Phase 2: AI Integration (Next)
+- [ ] OpenAI/Claude integration
+- [ ] Agent orchestration
+- [ ] Async processing with Redis
+
+### Phase 3: Artifact Generation
+- [ ] WBS agent
+- [ ] User stories agent
+- [ ] Tech specs agent
+- [ ] NFR agent
+- [ ] Architecture agent
+- [ ] Sprint planning agent
+- [ ] Test case agent
+
+### Phase 4: Production Ready
+- [ ] PostgreSQL integration
+- [ ] JWT authentication
+- [ ] WebSocket updates
+- [ ] Monitoring & logging
+- [ ] Docker deployment
+- [ ] Kubernetes orchestration
+
+---
+
+## License
+
+This project is for educational/demonstration purposes.
+
+---
+
+## Contact
+
+- **GitHub Repository**: https://github.com/Rachit19000/files_storage
+- **Email**: rachitjainemail@gmail.com
+
+---
+
+## Quick Commands
+
+```bash
+# Java Backend
+cd backend-java && mvn spring-boot:run
+
+# Node.js Backend  
+cd backend && npm start
+
+# Frontend
+cd frontend && npm start
+
+# Full Stack (Java)
+# Terminal 1: cd backend-java && mvn spring-boot:run
+# Terminal 2: cd frontend && npm start
+```
+
+---
+
+**Built with ❤️ using React, Spring Boot, and AI**

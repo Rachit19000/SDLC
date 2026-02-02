@@ -45,7 +45,7 @@ const Login = () => {
       
     } catch (err) {
       if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError')) {
-        setError('Cannot connect to server. Please make sure the backend API is running on http://localhost:3000');
+        setError('Cannot connect to server. Please make sure the backend API is running on http://localhost:3001');
       } else {
         setError(err.message || 'An error occurred during login');
       }
