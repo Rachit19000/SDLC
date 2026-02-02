@@ -29,11 +29,11 @@ mvn -version
 
 1. Open file: `backend-java/src/main/resources/application.properties`
 2. Find the line: `github.token=${GITHUB_TOKEN:}`
-3. Replace it with: `github.token=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`
+3. Keep it as is (it reads from environment variable)
 
    **OR** set it as environment variable:
    ```powershell
-   $env:GITHUB_TOKEN = "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"
+   $env:GITHUB_TOKEN = "your_github_token_here"
    ```
 
 ---

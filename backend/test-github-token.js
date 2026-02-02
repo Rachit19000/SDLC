@@ -1,7 +1,7 @@
 // Test GitHub token and repository access
 const { Octokit } = require('@octokit/rest');
 
-const GITHUB_TOKEN = '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';
+const GITHUB_TOKEN = process.env.GITHUB_TOKEN || 'YOUR_GITHUB_TOKEN_HERE';
 const octokit = new Octokit({ auth: GITHUB_TOKEN });
 
 async function testToken() {
