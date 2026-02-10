@@ -4,6 +4,7 @@ import com.sdlc.dto.ErrorResponse;
 import com.sdlc.dto.LoginRequest;
 import com.sdlc.dto.LoginResponse;
 import com.sdlc.service.AuthService;
+import com.sdlc.service.GitHubAuthService;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -18,9 +19,11 @@ public class AuthController {
     
     private static final Logger log = LoggerFactory.getLogger(AuthController.class);
     private final AuthService authService;
+    private final GitHubAuthService gitHubAuthService;
     
-    public AuthController(AuthService authService) {
+    public AuthController(AuthService authService, GitHubAuthService gitHubAuthService) {
         this.authService = authService;
+        this.gitHubAuthService = gitHubAuthService;
     }
     
     @PostMapping("/login")
@@ -32,6 +35,24 @@ public class AuthController {
             log.error("Login failed: {}", e.getMessage());
             return ResponseEntity.status(401)
                     .body(ErrorResponse.of("UNAUTHORIZED", "Invalid email or password"));
+        }
+    }
+    
+    @PostMapping("/github-login")
+    public ResponseEntity<?> githubLogin(@RequestBody Map<String, String> request) {
+        try {
+            String username = request.get("username");
+            String password = request.get("password");
+            
+            log.info("GitHub login attempt for username: {}", username);
+            
+            LoginResponse response = gitHubAuthService.authenticateWithGitHub(username, password);
+            return ResponseEntity.ok(response);
+        } catch (Exception e) {
+            log.error("GitHub login failed: {}", e.getMessage());
+            return ResponseEntity.status(401)
+                    .body(ErrorResponse.of("UNAUTHORIZED", 
+                        "GitHub authentication failed: " + e.getMessage()));
         }
     }
     

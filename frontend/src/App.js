@@ -2,6 +2,7 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Login from './components/Login';
 import Dashboard from './pages/Dashboard';
+import RequirementUpload from './components/RequirementUpload';
 import './App.css';
 
 // Protected Route Component
@@ -21,6 +22,14 @@ function App() {
             element={
               <ProtectedRoute>
                 <Dashboard />
+              </ProtectedRoute>
+            } 
+          />
+          <Route 
+            path="/new-project" 
+            element={
+              <ProtectedRoute>
+                <RequirementUpload />
               </ProtectedRoute>
             } 
           />
