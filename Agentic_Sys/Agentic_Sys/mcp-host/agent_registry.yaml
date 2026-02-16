@@ -1,0 +1,8 @@
+agents:
+  text-extraction-agent:
+    path: ../agents/text_extraction
+    entry: server.py
+
+  requirements-agent:
+    path: ../agents/requirements_agent
+    entry: server.py

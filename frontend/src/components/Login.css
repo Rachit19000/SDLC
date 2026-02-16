@@ -19,6 +19,7 @@
   width: 100%;
   max-width: 380px;
   margin-bottom: 16px;
+  text-align: center;
 }
 
 .github-logo {
@@ -45,64 +46,6 @@
   font-weight: 400;
 }
 
-.login-form {
-  display: flex;
-  flex-direction: column;
-  gap: 0;
-}
-
-.form-group {
-  display: flex;
-  flex-direction: column;
-  margin-bottom: 16px;
-}
-
-.password-label-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 8px;
-}
-
-.form-label {
-  font-size: 14px;
-  font-weight: 500;
-  color: #24292f;
-  margin-bottom: 8px;
-}
-
-.forgot-password {
-  font-size: 12px;
-  color: #0969da;
-  text-decoration: none;
-  cursor: pointer;
-}
-
-.forgot-password:hover {
-  text-decoration: underline;
-}
-
-.form-input {
-  padding: 8px 12px;
-  border: 1px solid #d0d7de;
-  border-radius: 6px;
-  font-size: 14px;
-  line-height: 20px;
-  background-color: #ffffff;
-  transition: all 0.2s ease;
-  outline: none;
-  min-height: 38px;
-}
-
-.form-input:focus {
-  border-color: #0969da;
-  box-shadow: 0 0 0 3px rgba(9, 105, 218, 0.12);
-}
-
-.form-input::placeholder {
-  color: #6e7781;
-}
-
 .error-message {
   background-color: #fff5f5;
   border: 1px solid #ffcccb;
@@ -112,21 +55,22 @@
   font-size: 13px;
   margin-bottom: 16px;
   line-height: 1.5;
+  text-align: left;
 }
 
 .login-button {
   background-color: #2da44e;
   color: white;
   border: 1px solid rgba(27, 31, 36, 0.15);
-  padding: 8px 16px;
+  padding: 12px 24px;
   border-radius: 6px;
-  font-size: 14px;
+  font-size: 16px;
   font-weight: 500;
   cursor: pointer;
   transition: background-color 0.15s ease;
-  margin-top: 8px;
-  min-height: 40px;
+  min-height: 44px;
   box-shadow: 0 1px 0 rgba(27, 31, 36, 0.04);
+  width: 100%;
 }
 
 .login-button:hover:not(:disabled) {
@@ -145,6 +89,32 @@
   opacity: 0.6;
 }
 
+.github-oauth-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #24292f;
+  border-color: #24292f;
+}
+
+.github-oauth-btn:hover:not(:disabled) {
+  background-color: #32383f;
+}
+
+.github-oauth-btn:active:not(:disabled) {
+  background-color: #1b1f23;
+}
+
+.github-oauth-btn:disabled {
+  background-color: #6e7781;
+}
+
+.oauth-info {
+  font-size: 12px;
+  color: #57606a;
+  margin-top: 16px;
+  line-height: 1.5;
+}
 
 .signup-box {
   background: #ffffff;

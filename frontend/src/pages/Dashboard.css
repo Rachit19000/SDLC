@@ -16,8 +16,20 @@
 
 .header-left {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  align-items: center;
+}
+
+.header-brand {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.user-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  border: 2px solid #d0d7de;
 }
 
 .dashboard-header h2 {
@@ -77,6 +89,14 @@
   margin-bottom: 24px;
   padding-bottom: 16px;
   border-bottom: 1px solid #d0d7de;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.projects-header-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
 }
 
 .projects-header h3 {
@@ -84,6 +104,40 @@
   font-size: 20px;
   font-weight: 600;
   margin: 0;
+}
+
+.repo-count {
+  background: #ddf4ff;
+  color: #0969da;
+  padding: 2px 8px;
+  border-radius: 12px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.projects-header-right {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.search-box {
+  position: relative;
+}
+
+.search-input {
+  padding: 6px 12px;
+  border: 1px solid #d0d7de;
+  border-radius: 6px;
+  font-size: 14px;
+  width: 260px;
+  transition: border-color 0.2s;
+  outline: none;
+}
+
+.search-input:focus {
+  border-color: #0969da;
+  box-shadow: 0 0 0 3px rgba(9, 105, 218, 0.1);
 }
 
 .create-project-btn {
@@ -96,22 +150,77 @@
   font-size: 14px;
   font-weight: 500;
   transition: background-color 0.2s;
+  white-space: nowrap;
 }
 
 .create-project-btn:hover {
   background: #1a7f37;
 }
 
+/* Loading State */
+.loading-state {
+  text-align: center;
+  padding: 48px 24px;
+  color: #57606a;
+}
+
+.loading-spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid #d0d7de;
+  border-top-color: #0969da;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  margin: 0 auto 16px auto;
+}
+
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* Error State */
+.dashboard-error {
+  background: #ffebe9;
+  border: 1px solid #ff8182;
+  color: #cf222e;
+  padding: 12px 16px;
+  border-radius: 6px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.retry-btn {
+  padding: 4px 12px;
+  background: #fff;
+  border: 1px solid #cf222e;
+  color: #cf222e;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: all 0.2s;
+}
+
+.retry-btn:hover {
+  background: #cf222e;
+  color: #fff;
+}
+
+/* Empty State */
 .empty-state {
   text-align: center;
   padding: 48px 24px;
   color: #57606a;
 }
 
+.empty-state p {
+  margin-bottom: 8px;
+}
+
+/* Repos Grid */
 .projects-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 20px;
+  grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
+  gap: 16px;
 }
 
 .project-card {
@@ -120,6 +229,8 @@
   padding: 20px;
   background: #ffffff;
   transition: all 0.2s;
+  display: flex;
+  flex-direction: column;
 }
 
 .project-card:hover {
@@ -128,10 +239,14 @@
 }
 
 .project-header {
+  margin-bottom: 8px;
+}
+
+.repo-name-row {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  margin-bottom: 12px;
+  gap: 8px;
 }
 
 .project-header h4 {
@@ -140,41 +255,97 @@
   font-weight: 600;
   margin: 0;
   flex: 1;
+  min-width: 0;
 }
 
-.status-badge {
-  padding: 4px 8px;
+.repo-name-link {
+  color: #0969da;
+  text-decoration: none;
+  word-break: break-word;
+}
+
+.repo-name-link:hover {
+  text-decoration: underline;
+}
+
+.visibility-badge {
+  padding: 2px 8px;
   border-radius: 12px;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 500;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
-.status-badge.active {
+.visibility-badge.public {
   background: #ddf4ff;
   color: #0969da;
+  border: 1px solid #b6d7f5;
 }
 
-.status-badge.completed {
-  background: #dafbe1;
-  color: #1a7f37;
+.visibility-badge.private {
+  background: #fff8c5;
+  color: #9a6700;
+  border: 1px solid #ecd06f;
 }
 
-.project-info {
-  margin-bottom: 16px;
-}
-
-.last-updated {
+.repo-description {
   color: #57606a;
   font-size: 13px;
+  line-height: 1.5;
+  margin: 0 0 12px 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.repo-meta {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  font-size: 12px;
+  color: #57606a;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.repo-language {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.language-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
 }
 
 .project-actions {
   display: flex;
   gap: 8px;
+  margin-top: auto;
 }
 
-.view-btn,
-.edit-btn {
+.select-repo-btn {
+  padding: 6px 14px;
+  background: #1f883d;
+  color: white;
+  border: 1px solid rgba(27, 31, 36, 0.15);
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  transition: all 0.2s;
+}
+
+.select-repo-btn:hover {
+  background: #1a7f37;
+}
+
+.view-btn {
   padding: 6px 12px;
   background: #f6f8fa;
   color: #24292f;
@@ -182,11 +353,13 @@
   border-radius: 6px;
   cursor: pointer;
   font-size: 13px;
+  text-decoration: none;
   transition: all 0.2s;
+  display: inline-flex;
+  align-items: center;
 }
 
-.view-btn:hover,
-.edit-btn:hover {
+.view-btn:hover {
   background: #f3f4f6;
   border-color: #8c959f;
 }
@@ -210,7 +383,7 @@
   background: #ffffff;
   border-radius: 6px;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
-  max-width: 600px;
+  max-width: 560px;
   width: 100%;
   max-height: 90vh;
   overflow-y: auto;
@@ -260,6 +433,16 @@
   padding: 24px;
 }
 
+.modal-error {
+  background: #ffebe9;
+  border: 1px solid #ff8182;
+  color: #cf222e;
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  margin-bottom: 16px;
+}
+
 .modal-footer {
   display: flex;
   justify-content: flex-end;
@@ -278,6 +461,10 @@
   font-size: 14px;
   font-weight: 500;
   margin-bottom: 8px;
+}
+
+.required {
+  color: #cf222e;
 }
 
 .form-group input[type="text"],
@@ -399,6 +586,11 @@
   background: #1a7f37;
 }
 
+.create-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 @media (max-width: 768px) {
   .dashboard-header {
     padding: 12px 16px;
@@ -414,6 +606,20 @@
 
   .dashboard-content {
     padding: 16px;
+  }
+
+  .projects-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .projects-header-right {
+    width: 100%;
+    flex-direction: column;
+  }
+
+  .search-input {
+    width: 100%;
   }
 
   .projects-grid {

@@ -1,6 +1,7 @@
 import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import Login from './components/Login';
+import OAuthCallback from './components/OAuthCallback';
 import Dashboard from './pages/Dashboard';
 import RequirementUpload from './components/RequirementUpload';
 import './App.css';
@@ -17,6 +18,7 @@ function App() {
       <div className="App">
         <Routes>
           <Route path="/" element={<Login />} />
+          <Route path="/oauth/callback" element={<OAuthCallback />} />
           <Route 
             path="/dashboard" 
             element={

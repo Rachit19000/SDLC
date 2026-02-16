@@ -2,11 +2,11 @@ package com.sdlc.controller;
 
 import com.sdlc.dto.ErrorResponse;
 import com.sdlc.dto.TextUploadRequest;
-import com.sdlc.dto.UploadResponse;
-import com.sdlc.model.User;
-import com.sdlc.service.AuthService;
+import com.sdlc.model.Job;
+import com.sdlc.service.DocumentIngestionService;
 import com.sdlc.service.DocumentParserService;
-import com.sdlc.service.GitHubService;
+import com.sdlc.service.JobService;
+import com.sdlc.service.TokenStore;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -15,197 +15,207 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.Map;
 
+/**
+ * Controller for uploading requirements documents.
+ *
+ * All uploads are processed ASYNCHRONOUSLY and uploaded to the USER'S SELECTED REPO:
+ * 1. POST /upload or /paste → returns immediately with {jobId, status: "PROCESSING"}
+ * 2. Frontend connects to SSE at /api/v1/jobs/{jobId}/progress for real-time updates
+ * 3. Backend parses document, uploads to user's SELECTED GitHub repo using their OAuth token
+ * 4. On completion, SSE emits COMPLETED with githubFileUrl
+ *
+ * SECURITY: Uses the authenticated user's GitHub OAuth access token (from TokenStore).
+ * CRITICAL: repoOwner and repoName are required — no default/shared repos.
+ */
 @RestController
 @RequestMapping("/requirements")
 public class RequirementsController {
-    
+
     private static final Logger log = LoggerFactory.getLogger(RequirementsController.class);
-    private final AuthService authService;
+    private final TokenStore tokenStore;
+    private final JobService jobService;
+    private final DocumentIngestionService documentIngestionService;
     private final DocumentParserService documentParserService;
-    private final GitHubService gitHubService;
-    
-    public RequirementsController(AuthService authService, 
-                                  DocumentParserService documentParserService,
-                                  GitHubService gitHubService) {
-        this.authService = authService;
+
+    public RequirementsController(TokenStore tokenStore,
+                                  JobService jobService,
+                                  DocumentIngestionService documentIngestionService,
+                                  DocumentParserService documentParserService) {
+        this.tokenStore = tokenStore;
+        this.jobService = jobService;
+        this.documentIngestionService = documentIngestionService;
         this.documentParserService = documentParserService;
-        this.gitHubService = gitHubService;
     }
-    
+
+    /**
+     * Upload a document file (PDF, DOCX, TXT) to a user-selected GitHub repo.
+     * Returns immediately with a jobId. Processing happens asynchronously.
+     *
+     * POST /api/v1/requirements/upload
+     * Params: file, repoOwner, repoName
+     */
     @PostMapping("/upload")
     public ResponseEntity<?> uploadFile(
-            @RequestHeader("Authorization") String authHeader,
+            @RequestHeader(value = "Authorization", required = false) String authHeader,
             @RequestParam("file") MultipartFile file,
+            @RequestParam("repoOwner") String repoOwner,
+            @RequestParam("repoName") String repoName,
             @RequestParam(value = "name", required = false) String name) {
-        
+
         log.info("\n=== File Upload Request Received ===");
-        
+
         try {
-            // Authenticate user
-            User user = authenticateUser(authHeader);
-            log.info("User authenticated: {}", user.getEmail());
-            
+            // Authenticate and get token data
+            TokenStore.TokenData tokenData = extractAndValidateToken(authHeader);
+            log.info("User authenticated: {} ({})", tokenData.getName(), tokenData.getGithubUsername());
+            log.info("Target repo: {}/{}", repoOwner, repoName);
+
+            // Validate repo params
+            if (repoOwner == null || repoOwner.isBlank() || repoName == null || repoName.isBlank()) {
+                return ResponseEntity.badRequest()
+                        .body(ErrorResponse.of("BAD_REQUEST", "repoOwner and repoName are required"));
+            }
+
             // Validate file
             if (file.isEmpty()) {
-                log.error("ERROR: No file uploaded");
                 return ResponseEntity.badRequest()
                         .body(ErrorResponse.of("BAD_REQUEST", "No file uploaded"));
             }
-            
+
             String fileName = file.getOriginalFilename();
             String mimeType = file.getContentType();
-            long fileSize = file.getSize();
-            
-            log.info("File details:");
-            log.info("  Name: {}", fileName);
-            log.info("  Type: {}", mimeType);
-            log.info("  Size: {} bytes", fileSize);
-            
+            log.info("File details: Name={}, Type={}, Size={} bytes", fileName, mimeType, file.getSize());
+
             // Check if file type is supported
             if (!documentParserService.isSupportedFileType(mimeType, fileName)) {
-                log.error("ERROR: Unsupported file type");
                 return ResponseEntity.badRequest()
-                        .body(ErrorResponse.of("BAD_REQUEST", 
+                        .body(ErrorResponse.of("BAD_REQUEST",
                                 "Unsupported file type: " + mimeType + ". Supported: PDF, DOCX, TXT"));
             }
-            
-            // Step 1: Parse document
-            log.info("\n📄 Step 1: Parsing document...");
-            DocumentParserService.ParseResult parseResult = documentParserService.parseDocument(file);
-            String extractedText = parseResult.getText();
-            Map<String, Object> metadata = parseResult.getMetadata();
-            
-            log.info("✅ Document parsed successfully");
-            log.info("  Extracted text length: {} characters", extractedText.length());
-            if (metadata.containsKey("pages")) {
-                log.info("  Pages: {}", metadata.get("pages"));
-            }
-            
-            // Step 2: Store in GitHub
-            String jobId = "job_" + System.currentTimeMillis();
-            String baseFileName = fileName.substring(0, fileName.lastIndexOf('.'));
-            String textFileName = baseFileName + "_extracted.txt";
-            String filePath = "requirements/" + user.getId() + "/" + jobId + "/" + textFileName;
-            
-            log.info("\n📤 Step 2: Uploading extracted text to GitHub...");
-            log.info("  File path: {}", filePath);
-            
-            // Create commit message
-            StringBuilder commitMessage = new StringBuilder("Add parsed requirement: ")
-                    .append(fileName)
-                    .append(" (Job: ")
-                    .append(jobId)
-                    .append(")");
-            
-            if (metadata.containsKey("pages")) {
-                commitMessage.append(" - ").append(metadata.get("pages")).append(" pages");
-            }
-            commitMessage.append(" - ").append(extractedText.length()).append(" characters extracted");
-            
-            GitHubService.GitHubResult githubResult = gitHubService.createFileInGitHub(
-                    user.getEmail(),
-                    filePath,
-                    extractedText,
-                    commitMessage.toString()
+
+            // Save file to temp location
+            Path tempFile = Files.createTempFile("sdlc_upload_", "_" + fileName);
+            file.transferTo(tempFile);
+
+            // Create async job
+            Job job = jobService.createJob(fileName);
+            log.info("Created async job: {} for file: {} → {}/{}", job.getJobId(), fileName, repoOwner, repoName);
+
+            // Start async processing (non-blocking) — uploads to user's selected repo
+            documentIngestionService.processDocumentAsync(
+                    job.getJobId(),
+                    tempFile,
+                    fileName,
+                    mimeType,
+                    tokenData.getGithubAccessToken(),
+                    repoOwner,
+                    repoName,
+                    tokenData.getUserId()
             );
-            
-            log.info("✅ SUCCESS! Extracted text uploaded to GitHub");
-            log.info("  GitHub URL: {}", githubResult.getFileUrl());
-            log.info("===================================\n");
-            
-            return ResponseEntity.accepted().body(UploadResponse.builder()
-                    .jobId(jobId)
-                    .status("stored")
-                    .message("File parsed and text uploaded successfully to GitHub")
-                    .githubUrl(githubResult.getFileUrl())
-                    .commitUrl(githubResult.getCommitUrl())
-                    .filePath(filePath)
-                    .fileName(textFileName)
-                    .originalFileName(fileName)
-                    .extractedTextLength(extractedText.length())
-                    .metadata(metadata)
-                    .build());
-            
+
+            log.info("Async processing started for job: {}", job.getJobId());
+
+            return ResponseEntity.accepted().body(Map.of(
+                    "jobId", job.getJobId(),
+                    "status", "PROCESSING",
+                    "message", "Document upload accepted. Processing started.",
+                    "targetRepo", repoOwner + "/" + repoName
+            ));
+
         } catch (IOException e) {
-            log.error("\n❌ ERROR in file upload: {}", e.getMessage(), e);
-            log.error("===================================\n");
+            log.error("ERROR in file upload: {}", e.getMessage(), e);
             return ResponseEntity.internalServerError()
-                    .body(ErrorResponse.of("INTERNAL_ERROR", 
-                            "Failed to process file", e.getMessage()));
+                    .body(ErrorResponse.of("INTERNAL_ERROR",
+                            "Failed to process file upload", e.getMessage()));
         } catch (RuntimeException e) {
-            log.error("\n❌ ERROR: {}", e.getMessage());
+            log.error("AUTH ERROR: {}", e.getMessage());
             return ResponseEntity.status(401)
                     .body(ErrorResponse.of("UNAUTHORIZED", e.getMessage()));
         }
     }
-    
+
+    /**
+     * Upload pasted text requirements to a user-selected GitHub repo.
+     * Returns immediately with a jobId. Processing happens asynchronously.
+     *
+     * POST /api/v1/requirements/paste
+     */
     @PostMapping("/paste")
     public ResponseEntity<?> uploadText(
-            @RequestHeader("Authorization") String authHeader,
+            @RequestHeader(value = "Authorization", required = false) String authHeader,
             @Valid @RequestBody TextUploadRequest request) {
-        
+
         log.info("\n=== Text Upload Request Received ===");
-        
+
         try {
-            // Authenticate user
-            User user = authenticateUser(authHeader);
-            log.info("User authenticated: {}", user.getEmail());
-            log.info("Text length: {}", request.getText().length());
-            
-            // Generate job ID and file name
-            String jobId = "job_" + System.currentTimeMillis();
-            String fileName = (request.getName() != null && !request.getName().isEmpty())
-                    ? request.getName().replaceAll("[^a-zA-Z0-9]", "_") + ".txt"
-                    : "requirement_" + jobId + ".txt";
-            
-            String filePath = "requirements/" + user.getId() + "/" + jobId + "/" + fileName;
-            
-            log.info("File path: {}", filePath);
-            log.info("Attempting to upload to GitHub...");
-            
-            // Upload to GitHub
-            String commitMessage = "Add requirement text: " + fileName + " (Job: " + jobId + ")";
-            GitHubService.GitHubResult githubResult = gitHubService.createFileInGitHub(
-                    user.getEmail(),
-                    filePath,
+            TokenStore.TokenData tokenData = extractAndValidateToken(authHeader);
+            log.info("User authenticated: {} ({})", tokenData.getName(), tokenData.getGithubUsername());
+
+            // Validate repo params
+            if (request.getRepoOwner() == null || request.getRepoOwner().isBlank()
+                    || request.getRepoName() == null || request.getRepoName().isBlank()) {
+                return ResponseEntity.badRequest()
+                        .body(ErrorResponse.of("BAD_REQUEST", "repoOwner and repoName are required"));
+            }
+
+            log.info("Target repo: {}/{}", request.getRepoOwner(), request.getRepoName());
+            log.info("Text length: {} characters", request.getText().length());
+
+            // Create async job
+            String jobName = request.getName() != null ? request.getName() : "pasted_text";
+            Job job = jobService.createJob(jobName);
+            log.info("Created async job: {} for text → {}/{}", job.getJobId(),
+                    request.getRepoOwner(), request.getRepoName());
+
+            // Start async processing (non-blocking)
+            documentIngestionService.processTextAsync(
+                    job.getJobId(),
                     request.getText(),
-                    commitMessage
+                    request.getName(),
+                    tokenData.getGithubAccessToken(),
+                    request.getRepoOwner(),
+                    request.getRepoName(),
+                    tokenData.getUserId()
             );
-            
-            log.info("✅ SUCCESS! Text uploaded to GitHub");
-            log.info("  GitHub URL: {}", githubResult.getFileUrl());
-            log.info("===================================\n");
-            
-            return ResponseEntity.accepted().body(UploadResponse.builder()
-                    .jobId(jobId)
-                    .status("stored")
-                    .message("Text uploaded successfully to GitHub")
-                    .githubUrl(githubResult.getFileUrl())
-                    .commitUrl(githubResult.getCommitUrl())
-                    .filePath(filePath)
-                    .fileName(fileName)
-                    .build());
-            
-        } catch (IOException e) {
-            log.error("\n❌ ERROR in text upload: {}", e.getMessage(), e);
-            return ResponseEntity.internalServerError()
-                    .body(ErrorResponse.of("INTERNAL_ERROR", 
-                            "Failed to upload text to GitHub", e.getMessage()));
+
+            return ResponseEntity.accepted().body(Map.of(
+                    "jobId", job.getJobId(),
+                    "status", "PROCESSING",
+                    "message", "Text upload accepted. Processing started.",
+                    "targetRepo", request.getRepoOwner() + "/" + request.getRepoName()
+            ));
+
         } catch (RuntimeException e) {
-            log.error("\n❌ ERROR: {}", e.getMessage());
+            log.error("AUTH ERROR: {}", e.getMessage());
             return ResponseEntity.status(401)
                     .body(ErrorResponse.of("UNAUTHORIZED", e.getMessage()));
         }
     }
-    
-    private User authenticateUser(String authHeader) {
+
+    /**
+     * Extract the Bearer token from the Authorization header
+     * and validate it against the TokenStore.
+     */
+    private TokenStore.TokenData extractAndValidateToken(String authHeader) {
         if (authHeader == null || !authHeader.startsWith("Bearer ")) {
-            throw new RuntimeException("Authentication token required");
+            throw new RuntimeException("Authentication token required. Please sign in with GitHub.");
         }
-        
-        String token = authHeader.substring(7); // Remove "Bearer " prefix
-        return authService.validateToken(token);
+
+        String token = authHeader.substring(7);
+        TokenStore.TokenData tokenData = tokenStore.get(token);
+
+        if (tokenData == null) {
+            throw new RuntimeException("Invalid or expired session. Please re-authenticate with GitHub.");
+        }
+
+        if (tokenData.getGithubAccessToken() == null || tokenData.getGithubAccessToken().isBlank()) {
+            throw new RuntimeException("GitHub access token not available. Please re-authenticate.");
+        }
+
+        return tokenData;
     }
 }
