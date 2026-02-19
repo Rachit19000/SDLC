@@ -72,11 +72,21 @@ def run_agent(agent_name: str, arguments: dict):
     )
 
     if result.returncode != 0:
+        # Try to get structured error from stdout first
+        try:
+            output = json.loads(result.stdout)
+            if "error" in output:
+                raise RuntimeError(output["error"])
+        except (json.JSONDecodeError, KeyError):
+            pass
         raise RuntimeError(result.stderr)
 
-
     try:
-        return json.loads(result.stdout)
+        output = json.loads(result.stdout)
+        # Check if agent returned an error status
+        if isinstance(output, dict) and output.get("status") == "error":
+            raise RuntimeError(output.get("error", "Agent returned error status"))
+        return output
     except json.JSONDecodeError:
         return {"raw_output": result.stdout}
 

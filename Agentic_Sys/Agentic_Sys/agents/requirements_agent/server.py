@@ -1,8 +1,15 @@
 import sys
 import json
+import io
 from dotenv import load_dotenv
 
 load_dotenv()
+
+# Capture the real stdout before anything else can pollute it
+_real_stdout = sys.stdout
+# Redirect stdout to stderr during module loading so that
+# gradio_client's "Loaded as API: ..." messages don't corrupt our JSON output
+sys.stdout = sys.stderr
 
 from graph import build_graph
 from schemas.requirements import RequirementsArtifact
@@ -40,12 +47,15 @@ def main():
         raw_input = sys.stdin.read()
         args = json.loads(raw_input)
     except json.JSONDecodeError as e:
+        # Restore stdout for final JSON output only
+        sys.stdout = _real_stdout
         print(json.dumps({"error": f"Invalid JSON arguments: {str(e)}"}))
         sys.exit(1)
 
     requirement_text = args.get("requirement_text", "")
 
     if not requirement_text:
+        sys.stdout = _real_stdout
         print(json.dumps({"error": "No requirement_text provided"}))
         sys.exit(1)
 
@@ -72,6 +82,8 @@ def main():
         "result": artifact.model_dump(),
     }
 
+    # Restore real stdout for the final JSON output only
+    sys.stdout = _real_stdout
     print(json.dumps(output))
 
 

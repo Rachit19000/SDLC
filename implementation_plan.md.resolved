@@ -1,0 +1,495 @@
+# Tech Specs Agent — Architecture & Implementation Plan
+
+## 1. Context & Problem Statement
+
+The SDLC project automates the software development lifecycle. Today, when a user uploads a requirements document (PDF / DOCX / TXT):
+
+1. **Text Extraction Agent** — parses the raw document into clean text.
+2. **Requirements Agent** — converts that text into structured **User Stories + Acceptance Criteria**.
+
+These two agents already exist and are fully wired into the pipeline.
+
+**What's missing:** Once user stories are generated, the next natural SDLC step is to produce a **Technical Specification** — a detailed engineering blueprint that maps each user story into concrete technical decisions: architecture patterns, data models, API contracts, technology choices, component breakdowns, and security/performance considerations.
+
+### Goal
+
+Build a new **`tech-specs-agent`** that:
+
+- Receives the **parsed requirement text** and the **generated user stories** (output of the `requirements-agent`).
+- Produces a structured **Technical Specification Document** (Markdown) covering architecture, data model, APIs, components, non-functional requirements, and risks.
+- Follows the same agent pattern already established in the codebase (LangGraph + HuggingFace LLM + Pydantic validation).
+- Plugs into the existing MCP Host ([host.py](file:///c:/Users/Vishal.bhardwaj/SDLC/Agentic_Sys/Agentic_Sys/mcp-host/host.py)) and Java backend ([McpAgentService.java](file:///c:/Users/Vishal.bhardwaj/SDLC/backend-java/src/main/java/com/sdlc/service/McpAgentService.java)) with zero changes to the host infrastructure.
+
+---
+
+## 2. Current System Architecture (As-Is)
+
+```mermaid
+flowchart LR
+    subgraph Frontend["Frontend (React)"]
+        UI["Upload UI"]
+    end
+
+    subgraph JavaBackend["Java Backend (Spring Boot :3001)"]
+        DC["DocumentController"]
+        DIS["DocumentIngestionService"]
+        JS["JobService (SSE)"]
+        MAS["McpAgentService"]
+    end
+
+    subgraph MCPHost["MCP Host (FastAPI :8080)"]
+        HP["host.py /execute"]
+        AR["agent_registry.yaml"]
+    end
+
+    subgraph Agents["Python Agents"]
+        TEA["text-extraction-agent"]
+        RA["requirements-agent"]
+    end
+
+    subgraph GitHub["GitHub API"]
+        GH["User's Selected Repo"]
+    end
+
+    UI -->|"Upload file"| DC
+    DC --> DIS
+    DIS --> JS
+    DIS -->|"generateUserStories()"| MAS
+    MAS -->|"POST /execute"| HP
+    HP -->|"Lookup registry"| AR
+    HP -->|"subprocess stdin/stdout"| RA
+    DIS -->|"Upload .md"| GH
+```
+
+### Existing Pipeline (Step-by-step)
+
+| Step | Component | Action |
+|------|-----------|--------|
+| 1 | `DocumentController.java` | Receives file upload from frontend |
+| 2 | [DocumentIngestionService.java](file:///c:/Users/Vishal.bhardwaj/SDLC/backend-java/src/main/java/com/sdlc/service/DocumentIngestionService.java) | Parses document (PDF/DOCX/TXT) → clean text |
+| 3 | [McpAgentService.java](file:///c:/Users/Vishal.bhardwaj/SDLC/backend-java/src/main/java/com/sdlc/service/McpAgentService.java) | Calls MCP Host at `POST /execute` with `{ agent: "requirements-agent", arguments: { requirement_text, job_id } }` |
+| 4 | [host.py](file:///c:/Users/Vishal.bhardwaj/SDLC/Agentic_Sys/Agentic_Sys/mcp-host/host.py) | Looks up `requirements-agent` in [agent_registry.yaml](file:///c:/Users/Vishal.bhardwaj/SDLC/Agentic_Sys/Agentic_Sys/mcp-host/agent_registry.yaml), spawns `venv/Scripts/python.exe server.py`, passes JSON via stdin |
+| 5 | `requirements-agent/server.py` | Reads stdin → invokes LangGraph ([generate](file:///c:/Users/Vishal.bhardwaj/SDLC/Agentic_Sys/Agentic_Sys/agents/requirements_agent/graph.py#19-51) → [validate](file:///c:/Users/Vishal.bhardwaj/SDLC/Agentic_Sys/Agentic_Sys/agents/requirements_agent/graph.py#60-67) loop) → writes JSON to stdout |
+| 6 | [host.py](file:///c:/Users/Vishal.bhardwaj/SDLC/Agentic_Sys/Agentic_Sys/mcp-host/host.py) | Captures stdout, returns `ExecuteResponse { status, metadata }` |
+| 7 | [McpAgentService.java](file:///c:/Users/Vishal.bhardwaj/SDLC/backend-java/src/main/java/com/sdlc/service/McpAgentService.java) | Extracts [user_stories](file:///c:/Users/Vishal.bhardwaj/SDLC/Agentic_Sys/Agentic_Sys/agents/requirements_agent/server.py#11-35) from metadata |
+| 8 | [DocumentIngestionService.java](file:///c:/Users/Vishal.bhardwaj/SDLC/backend-java/src/main/java/com/sdlc/service/DocumentIngestionService.java) | Uploads `_parsed.md` and `_user_stories.md` to user's GitHub repo |
+
+### Key Agent Pattern (from `requirements-agent`)
+
+Every agent follows this contract:
+
+```
+┌──────────────┐    stdin (JSON)     ┌──────────────┐
+│   host.py    │ ──────────────────> │  server.py   │
+│              │ <────────────────── │              │
+└──────────────┘   stdout (JSON)     └──────────────┘
+```
+
+- **Input** (stdin): `{ "requirement_text": "...", "job_id": "..." }`
+- **Output** (stdout): `{ "status": "success", "result": {...}, "tech_spec": "..." }`
+- **LLM**: HuggingFace `Qwen/Qwen2.5-7B-Instruct` via `InferenceClient`
+- **Graph**: LangGraph `StateGraph` with generate → validate → retry loop (max 3 attempts)
+- **Schema**: Pydantic `BaseModel` with validators for output integrity
+
+---
+
+## 3. Proposed Architecture (To-Be)
+
+```mermaid
+flowchart TD
+    subgraph JavaBackend["Java Backend"]
+        DIS["DocumentIngestionService"]
+        MAS["McpAgentService"]
+    end
+
+    subgraph MCPHost["MCP Host (host.py)"]
+        HP["/execute endpoint"]
+        AR["agent_registry.yaml"]
+    end
+
+    subgraph Agents["Python Agents"]
+        RA["requirements-agent"]
+        TSA["tech-specs-agent ⭐ NEW"]
+    end
+
+    DIS -->|"1. generateUserStories(text)"| MAS
+    MAS -->|"2. POST /execute\nagent=requirements-agent"| HP
+    HP -->|"3. subprocess"| RA
+    RA -->|"4. user stories JSON"| HP
+    HP -->|"5. response"| MAS
+    MAS -->|"6. user stories"| DIS
+
+    DIS -->|"7. generateTechSpecs(text, stories)"| MAS
+    MAS -->|"8. POST /execute\nagent=tech-specs-agent"| HP
+    HP -->|"9. subprocess"| TSA
+    TSA -->|"10. tech spec JSON"| HP
+    HP -->|"11. response"| MAS
+    MAS -->|"12. tech spec markdown"| DIS
+    DIS -->|"13. Upload to GitHub"| GH["GitHub Repo"]
+
+    style TSA fill:#4CAF50,stroke:#333,color:#fff
+```
+
+### What Changes vs. What Stays the Same
+
+| Aspect | Change Required? | Details |
+|--------|:---:|---------|
+| [host.py](file:///c:/Users/Vishal.bhardwaj/SDLC/Agentic_Sys/Agentic_Sys/mcp-host/host.py) | ❌ No | Generic runner — just add registry entry |
+| [agent_registry.yaml](file:///c:/Users/Vishal.bhardwaj/SDLC/Agentic_Sys/Agentic_Sys/mcp-host/agent_registry.yaml) | ✅ Yes | Add `tech-specs-agent` entry |
+| [McpAgentService.java](file:///c:/Users/Vishal.bhardwaj/SDLC/backend-java/src/main/java/com/sdlc/service/McpAgentService.java) | ✅ Yes | Add `generateTechSpecs()` method |
+| [DocumentIngestionService.java](file:///c:/Users/Vishal.bhardwaj/SDLC/backend-java/src/main/java/com/sdlc/service/DocumentIngestionService.java) | ✅ Yes | Call tech specs agent after user stories, upload result |
+| New Agent files | ✅ Yes | Create `agents/tech_specs_agent/` folder with all files |
+| [MCPExecuteRequest](file:///c:/Users/Vishal.bhardwaj/SDLC/backend-java/src/main/java/com/sdlc/mcp/MCPExecuteRequest.java#5-33) / [Response](file:///c:/Users/Vishal.bhardwaj/SDLC/Agentic_Sys/Agentic_Sys/agents/requirements_agent/llm.py#45-48) | ❌ No | Already generic |
+| [McpConfig.java](file:///c:/Users/Vishal.bhardwaj/SDLC/backend-java/src/main/java/com/sdlc/mcp/McpConfig.java) | ❌ No | Already configured |
+
+---
+
+## 4. Tech Specs Agent — Internal Architecture
+
+### 4.1 LangGraph State Machine
+
+```mermaid
+stateDiagram-v2
+    [*] --> Generate
+    Generate --> Validate
+    Validate --> Success: Valid
+    Validate --> Generate: Invalid & attempts < 3
+    Validate --> Error: Invalid & attempts >= 3
+    Success --> [*]
+    Error --> [*]
+```
+
+The agent mirrors the proven pattern from `requirements-agent`:
+
+1. **Generate** — Sends a structured prompt to the LLM with the requirement text + user stories, asking for a tech spec in strict JSON format matching the Pydantic schema.
+2. **Validate** — Parses the LLM output with Pydantic. If validation fails, retries (up to 3 attempts).
+3. **Output** — Produces a structured `TechSpecArtifact` that gets formatted into Markdown.
+
+### 4.2 Input & Output Contract
+
+**Input** (received via stdin from [host.py](file:///c:/Users/Vishal.bhardwaj/SDLC/Agentic_Sys/Agentic_Sys/mcp-host/host.py)):
+
+```json
+{
+  "requirement_text": "The system shall support user registration...",
+  "user_stories": "# Generated User Stories\n## US01\n...",
+  "job_id": "job_1739..."
+}
+```
+
+**Output** (written to stdout as JSON):
+
+```json
+{
+  "status": "success",
+  "tech_spec": "# Technical Specification\n## 1. System Overview\n...",
+  "result": {
+    "system_overview": { "name": "...", "description": "...", "architecture_pattern": "..." },
+    "data_model": { "entities": [...] },
+    "api_design": { "endpoints": [...] },
+    "components": [...],
+    "non_functional_requirements": { "performance": {...}, "security": {...} },
+    "tech_stack": { "frontend": "...", "backend": "...", "database": "..." },
+    "risks_and_mitigations": [...],
+    "open_questions": [...]
+  }
+}
+```
+
+### 4.3 Pydantic Output Schema (`TechSpecArtifact`)
+
+```mermaid
+classDiagram
+    class TechSpecArtifact {
+        +SystemOverview system_overview
+        +DataModel data_model
+        +APIDesign api_design
+        +List~Component~ components
+        +NonFunctionalRequirements nfrs
+        +TechStack tech_stack
+        +List~Risk~ risks_and_mitigations
+        +List~str~ open_questions
+    }
+
+    class SystemOverview {
+        +str name
+        +str description
+        +str architecture_pattern
+        +List~str~ key_decisions
+    }
+
+    class DataModel {
+        +List~Entity~ entities
+    }
+
+    class Entity {
+        +str name
+        +List~EntityField~ fields
+        +List~str~ relationships
+    }
+
+    class APIDesign {
+        +List~APIEndpoint~ endpoints
+    }
+
+    class APIEndpoint {
+        +str method
+        +str path
+        +str description
+        +str request_body
+        +str response_body
+    }
+
+    class Component {
+        +str name
+        +str responsibility
+        +List~str~ depends_on
+    }
+
+    class NonFunctionalRequirements {
+        +str performance
+        +str security
+        +str scalability
+        +str availability
+    }
+
+    class TechStack {
+        +str frontend
+        +str backend
+        +str database
+        +str infrastructure
+    }
+
+    class Risk {
+        +str risk
+        +str impact
+        +str mitigation
+    }
+
+    TechSpecArtifact --> SystemOverview
+    TechSpecArtifact --> DataModel
+    TechSpecArtifact --> APIDesign
+    TechSpecArtifact --> Component
+    TechSpecArtifact --> NonFunctionalRequirements
+    TechSpecArtifact --> TechStack
+    TechSpecArtifact --> Risk
+    DataModel --> Entity
+    APIDesign --> APIEndpoint
+```
+
+### 4.4 File Structure
+
+```
+agents/
+├── requirements_agent/          ← Existing
+│   ├── server.py
+│   ├── graph.py
+│   ├── llm.py
+│   ├── schemas/requirements.py
+│   ├── utils.py
+│   └── requirements.txt
+│
+└── tech_specs_agent/            ← NEW
+    ├── server.py                # Entry point (reads stdin, writes stdout)
+    ├── graph.py                 # LangGraph state machine (generate → validate)
+    ├── llm.py                   # HuggingFace LLM wrapper (shared pattern)
+    ├── schemas/
+    │   ├── __init__.py
+    │   └── tech_spec.py         # Pydantic TechSpecArtifact schema
+    ├── utils.py                 # Helpers (read_text, write_json)
+    ├── requirements.txt         # Dependencies
+    └── .env                     # HF_TOKEN (gitignored)
+```
+
+---
+
+## 5. End-to-End Flow (With Tech Specs Agent)
+
+```mermaid
+sequenceDiagram
+    actor User
+    participant FE as Frontend
+    participant BE as Java Backend
+    participant MCP as MCP Host
+    participant RA as Requirements Agent
+    participant TSA as Tech Specs Agent
+    participant GH as GitHub
+
+    User->>FE: Upload document
+    FE->>BE: POST /api/v1/documents/upload
+
+    Note over BE: Stage 1-3: Parse document
+    BE->>BE: Extract text from PDF/DOCX/TXT
+
+    Note over BE: Stage 4: Generate User Stories
+    BE->>MCP: POST /execute {agent: "requirements-agent"}
+    MCP->>RA: subprocess (stdin JSON)
+    RA->>RA: LangGraph: generate → validate
+    RA-->>MCP: stdout JSON (user stories)
+    MCP-->>BE: ExecuteResponse
+
+    Note over BE: Stage 5: Generate Tech Specs ⭐ NEW
+    BE->>MCP: POST /execute {agent: "tech-specs-agent"}
+    MCP->>TSA: subprocess (stdin JSON)
+    TSA->>TSA: LangGraph: generate → validate
+    TSA-->>MCP: stdout JSON (tech spec)
+    MCP-->>BE: ExecuteResponse
+
+    Note over BE: Stage 6: Upload to GitHub
+    BE->>GH: Upload _parsed.md
+    BE->>GH: Upload _user_stories.md
+    BE->>GH: Upload _tech_spec.md ⭐ NEW
+    GH-->>BE: File URLs
+    BE-->>FE: SSE: Job Completed
+    FE-->>User: Show results + links
+```
+
+---
+
+## 6. What the Tech Specs Agent Achieves
+
+### For the User
+
+| Output Section | What It Delivers |
+|:---|:---|
+| **System Overview** | High-level architecture pattern, key design decisions |
+| **Data Model** | Entity definitions, fields, relationships (ERD-ready) |
+| **API Design** | REST endpoints with methods, paths, request/response bodies |
+| **Component Breakdown** | Modules, their responsibilities, and dependencies |
+| **Non-Functional Reqs** | Performance, security, scalability, availability targets |
+| **Tech Stack** | Recommended frontend, backend, database, infrastructure |
+| **Risks & Mitigations** | Identified risks with impact analysis and mitigation plans |
+| **Open Questions** | Items needing stakeholder clarification |
+
+### For the SDLC Pipeline
+
+- Bridges the gap between **"What to build"** (user stories) and **"How to build it"** (engineering blueprint)
+- Produces a **structured, version-controlled artifact** uploaded to GitHub alongside the user stories
+- Enables downstream agents (WBS generation, code scaffolding, test plan generation) to consume a well-defined schema
+
+---
+
+## 7. Proposed Changes (File-by-File)
+
+### Python Agent (New Files)
+
+---
+
+#### [NEW] [server.py](file:///c:/Users/Vishal.bhardwaj/SDLC/Agentic_Sys/Agentic_Sys/agents/tech_specs_agent/server.py)
+
+Entry point. Reads JSON from stdin, invokes the LangGraph, formats output as Markdown, writes JSON to stdout. Mirrors [requirements_agent/server.py](file:///c:/Users/Vishal.bhardwaj/SDLC/Agentic_Sys/Agentic_Sys/agents/requirements_agent/server.py).
+
+#### [NEW] [graph.py](file:///c:/Users/Vishal.bhardwaj/SDLC/Agentic_Sys/Agentic_Sys/agents/tech_specs_agent/graph.py)
+
+LangGraph `StateGraph` with two nodes: [generate](file:///c:/Users/Vishal.bhardwaj/SDLC/Agentic_Sys/Agentic_Sys/agents/requirements_agent/graph.py#19-51) (LLM prompt) and [validate](file:///c:/Users/Vishal.bhardwaj/SDLC/Agentic_Sys/Agentic_Sys/agents/requirements_agent/graph.py#60-67) (Pydantic parse). Conditional edge for retry on validation failure.
+
+#### [NEW] [llm.py](file:///c:/Users/Vishal.bhardwaj/SDLC/Agentic_Sys/Agentic_Sys/agents/tech_specs_agent/llm.py)
+
+HuggingFace LLM wrapper reusing the same `Qwen/Qwen2.5-7B-Instruct` model. Copy of [requirements_agent/llm.py](file:///c:/Users/Vishal.bhardwaj/SDLC/Agentic_Sys/Agentic_Sys/agents/requirements_agent/llm.py).
+
+#### [NEW] [tech_spec.py](file:///c:/Users/Vishal.bhardwaj/SDLC/Agentic_Sys/Agentic_Sys/agents/tech_specs_agent/schemas/tech_spec.py)
+
+Pydantic models: `TechSpecArtifact`, `SystemOverview`, `DataModel`, `Entity`, `APIDesign`, `APIEndpoint`, `Component`, `NonFunctionalRequirements`, `TechStack`, `Risk`. Includes semantic validators (e.g., at least one entity, every component must have a responsibility).
+
+#### [NEW] [utils.py](file:///c:/Users/Vishal.bhardwaj/SDLC/Agentic_Sys/Agentic_Sys/agents/tech_specs_agent/utils.py)
+
+File I/O helpers. Copy of [requirements_agent/utils.py](file:///c:/Users/Vishal.bhardwaj/SDLC/Agentic_Sys/Agentic_Sys/agents/requirements_agent/utils.py).
+
+#### [NEW] [requirements.txt](file:///c:/Users/Vishal.bhardwaj/SDLC/Agentic_Sys/Agentic_Sys/agents/tech_specs_agent/requirements.txt)
+
+Dependencies: `langgraph`, `pydantic`, `huggingface-hub`, `python-dotenv`.
+
+---
+
+### Configuration (Modify Existing)
+
+---
+
+#### [MODIFY] [agent_registry.yaml](file:///c:/Users/Vishal.bhardwaj/SDLC/Agentic_Sys/Agentic_Sys/mcp-host/agent_registry.yaml)
+
+Add `tech-specs-agent` entry pointing to `../agents/tech_specs_agent` with entry [server.py](file:///c:/Users/Vishal.bhardwaj/SDLC/Agentic_Sys/Agentic_Sys/agents/text_extraction/server.py).
+
+```diff
+ agents:
+   text-extraction-agent:
+     path: ../agents/text_extraction
+     entry: server.py
+ 
+   requirements-agent:
+     path: ../agents/requirements_agent
+     entry: server.py
++
++  tech-specs-agent:
++    path: ../agents/tech_specs_agent
++    entry: server.py
+```
+
+---
+
+### Java Backend (Modify Existing)
+
+---
+
+#### [MODIFY] [McpAgentService.java](file:///c:/Users/Vishal.bhardwaj/SDLC/backend-java/src/main/java/com/sdlc/service/McpAgentService.java)
+
+Add a `generateTechSpecs(String parsedText, String userStories, String jobId)` method that calls `POST /execute` with `agent = "tech-specs-agent"` and `arguments = { requirement_text, user_stories, job_id }`. Extracts `tech_spec` from the response metadata.
+
+#### [MODIFY] [DocumentIngestionService.java](file:///c:/Users/Vishal.bhardwaj/SDLC/backend-java/src/main/java/com/sdlc/service/DocumentIngestionService.java)
+
+After the user stories generation step, add a new stage that:
+1. Calls `mcpAgentService.generateTechSpecs(extractedText, userStories, jobId)`
+2. Uploads the resulting `_tech_spec.md` to GitHub alongside the other artifacts
+3. Emits SSE progress updates for the new stage
+
+---
+
+## 8. Verification Plan
+
+### Automated Tests
+
+1. **Agent standalone test** — Run the tech specs agent directly with sample input via stdin and verify JSON output:
+   ```bash
+   cd Agentic_Sys/Agentic_Sys/agents/tech_specs_agent
+   echo '{"requirement_text": "The system shall support user registration with email and password.", "user_stories": "## US01\nAs a user, I want to register...", "job_id": "test_001"}' | venv\Scripts\python.exe server.py
+   ```
+   Verify: Output is valid JSON with `status: "success"` and a non-empty `tech_spec` field.
+
+2. **Schema validation test** — Create a small Python test script that imports `TechSpecArtifact` and validates sample data:
+   ```bash
+   cd Agentic_Sys/Agentic_Sys/agents/tech_specs_agent
+   venv\Scripts\python.exe -c "from schemas.tech_spec import TechSpecArtifact; print('Schema OK')"
+   ```
+
+### Manual Verification
+
+1. **End-to-end via the UI** — Upload a sample requirements document through the frontend, confirm that all three artifacts (`_parsed.md`, `_user_stories.md`, `_tech_spec.md`) appear in the user's GitHub repository.
+2. **MCP Host health check** — Hit `GET http://localhost:8080/health` to verify the MCP host is running, then `POST /execute` with `{ "agent": "tech-specs-agent", "arguments": {...} }` to test the agent via the host.
+
+> [!IMPORTANT]
+> The LLM call depends on a valid `HF_TOKEN` environment variable. The first run may be slow (~20-30s) if the HuggingFace model is cold-loading.
+
+---
+
+## 9. Summary Diagram — Before vs. After
+
+```mermaid
+flowchart LR
+    subgraph Before["Current Pipeline"]
+        direction TB
+        B1["📄 Document Upload"] --> B2["📝 Text Extraction"]
+        B2 --> B3["📋 User Stories"]
+        B3 --> B4["⬆️ Upload to GitHub"]
+    end
+
+    subgraph After["With Tech Specs Agent"]
+        direction TB
+        A1["📄 Document Upload"] --> A2["📝 Text Extraction"]
+        A2 --> A3["📋 User Stories"]
+        A3 --> A4["🏗️ Tech Specifications ⭐"]
+        A4 --> A5["⬆️ Upload to GitHub"]
+    end
+
+    style A4 fill:#4CAF50,stroke:#333,color:#fff
+```
+
+The Tech Specs Agent represents the next logical step in the SDLC pipeline, transforming high-level user stories into actionable engineering blueprints — all automated, version-controlled, and integrated into the existing architecture.

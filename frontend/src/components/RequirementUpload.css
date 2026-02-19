@@ -13,7 +13,7 @@
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
   padding: 40px;
   width: 100%;
-  max-width: 600px;
+  max-width: 700px;
   position: relative;
 }
 
@@ -50,7 +50,86 @@
   font-size: 14px;
   color: #718096;
   text-align: center;
-  margin-bottom: 32px;
+  margin-bottom: 24px;
+}
+
+/* ==============================
+   Step Indicator
+   ============================== */
+
+.step-indicator {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0;
+  margin-bottom: 28px;
+  padding: 0 10px;
+}
+
+.step-dot {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  z-index: 1;
+}
+
+.step-number {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: #e2e8f0;
+  color: #a0aec0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 700;
+  transition: all 0.3s ease;
+  border: 3px solid #e2e8f0;
+}
+
+.step-dot.active .step-number {
+  background: #667eea;
+  color: white;
+  border-color: #667eea;
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.4);
+}
+
+.step-dot.completed .step-number {
+  background: #48bb78;
+  color: white;
+  border-color: #48bb78;
+  box-shadow: 0 2px 8px rgba(72, 187, 120, 0.4);
+}
+
+.step-label {
+  font-size: 11px;
+  color: #a0aec0;
+  margin-top: 6px;
+  font-weight: 500;
+  white-space: nowrap;
+  transition: color 0.3s ease;
+}
+
+.step-dot.active .step-label {
+  color: #667eea;
+  font-weight: 600;
+}
+
+.step-dot.completed .step-label {
+  color: #48bb78;
+  font-weight: 600;
+}
+
+.step-line {
+  flex: 1;
+  height: 3px;
+  background: #e2e8f0;
+  margin: 0 8px;
+  margin-bottom: 22px;
+  border-radius: 2px;
+  min-width: 40px;
 }
 
 /* ==============================
@@ -113,29 +192,9 @@
   text-decoration: underline;
 }
 
-/* Target repo banner */
-.target-repo-banner {
-  background: #f0f6ff;
-  border: 1px solid #b6d7f5;
-  border-radius: 8px;
-  padding: 12px 16px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 24px;
-}
-
-.target-label {
-  font-size: 13px;
-  color: #57606a;
-  font-weight: 500;
-}
-
-.target-repo-name {
-  font-size: 14px;
-  color: #0969da;
-  font-weight: 600;
-}
+/* ==============================
+   Method Selection (Step 1)
+   ============================== */
 
 .method-selection {
   display: flex;
@@ -177,6 +236,10 @@
   color: #718096;
   font-weight: 500;
 }
+
+/* ==============================
+   Drop Zone (File Upload)
+   ============================== */
 
 .drop-zone {
   border: 2px dashed #cbd5e0;
@@ -221,6 +284,10 @@
   color: #718096;
 }
 
+/* ==============================
+   Paste Text Section (Step 1)
+   ============================== */
+
 .paste-section {
   margin-bottom: 24px;
 }
@@ -256,12 +323,16 @@
   color: #9ca3af;
 }
 
+/* ==============================
+   Upload Button (Step 1)
+   ============================== */
+
 .upload-button {
   width: 100%;
   background-color: #667eea;
   color: white;
   border: none;
-  padding: 12px 24px;
+  padding: 14px 24px;
   border-radius: 8px;
   font-size: 16px;
   font-weight: 600;
@@ -276,6 +347,192 @@
 .upload-button:disabled {
   background-color: #9ca3af;
   cursor: not-allowed;
+}
+
+/* ==============================
+   Review Section (Steps 2 & 3)
+   ============================== */
+
+.review-section {
+  margin-bottom: 20px;
+  animation: fadeIn 0.3s ease-in;
+}
+
+.review-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.review-label {
+  font-size: 15px;
+  font-weight: 600;
+  color: #1a202c;
+}
+
+.review-char-count {
+  font-size: 12px;
+  color: #a0aec0;
+  background: #f7fafc;
+  padding: 2px 10px;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+}
+
+.review-textarea {
+  width: 100%;
+  padding: 14px 16px;
+  border: 2px solid #e2e8f0;
+  border-radius: 10px;
+  font-size: 14px;
+  font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+  line-height: 1.6;
+  resize: vertical;
+  min-height: 280px;
+  transition: all 0.2s;
+  outline: none;
+  box-sizing: border-box;
+  background: #fafbfc;
+  color: #1a202c;
+}
+
+.review-textarea:focus {
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+  background: white;
+}
+
+.review-textarea:disabled {
+  background: #f3f4f6;
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+/* ==============================
+   Action Buttons (Save / Next)
+   ============================== */
+
+.action-buttons {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.save-btn {
+  flex: 1;
+  padding: 14px 20px;
+  border: 2px solid #48bb78;
+  border-radius: 8px;
+  background: white;
+  color: #48bb78;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.save-btn:hover:not(:disabled) {
+  background: #48bb78;
+  color: white;
+}
+
+.save-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.save-btn.saved {
+  background: #48bb78;
+  color: white;
+  border-color: #48bb78;
+}
+
+.next-btn {
+  flex: 1;
+  padding: 14px 20px;
+  border: none;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  font-size: 15px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.next-btn:hover:not(:disabled) {
+  opacity: 0.9;
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+}
+
+.next-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.start-over-btn {
+  background: none;
+  border: none;
+  color: #718096;
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  padding: 8px 0;
+  transition: color 0.2s;
+  display: block;
+  text-align: center;
+  width: 100%;
+}
+
+.start-over-btn:hover:not(:disabled) {
+  color: #667eea;
+}
+
+.start-over-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ==============================
+   Loading Spinner
+   ============================== */
+
+.btn-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+.spinner {
+  width: 18px;
+  height: 18px;
+  border: 3px solid rgba(255, 255, 255, 0.3);
+  border-top-color: white;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+  display: inline-block;
+}
+
+.save-btn .spinner {
+  border: 3px solid rgba(72, 187, 120, 0.3);
+  border-top-color: #48bb78;
+}
+
+.save-btn:hover:not(:disabled) .spinner {
+  border: 3px solid rgba(255, 255, 255, 0.3);
+  border-top-color: white;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 
 /* ==============================
@@ -314,88 +571,19 @@
 }
 
 /* ==============================
-   Progress Bar
+   Animations
    ============================== */
-
-.progress-section {
-  margin-bottom: 24px;
-  animation: fadeIn 0.3s ease-in;
-}
 
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(-8px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
-.progress-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 8px;
-}
-
-.progress-stage {
-  font-size: 14px;
-  font-weight: 500;
-  color: #4a5568;
-}
-
-.progress-percent {
-  font-size: 14px;
-  font-weight: 700;
-  color: #667eea;
-}
-
-.progress-bar-track {
-  width: 100%;
-  height: 12px;
-  background-color: #e2e8f0;
-  border-radius: 6px;
-  overflow: hidden;
-  position: relative;
-}
-
-.progress-bar-fill {
-  height: 100%;
-  background: linear-gradient(90deg, #667eea 0%, #764ba2 100%);
-  border-radius: 6px;
-  transition: width 0.5s ease-in-out;
-  position: relative;
-}
-
-.progress-bar-fill::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: linear-gradient(
-    90deg,
-    transparent 0%,
-    rgba(255, 255, 255, 0.3) 50%,
-    transparent 100%
-  );
-  animation: shimmer 1.5s infinite;
-}
-
-@keyframes shimmer {
-  0% { transform: translateX(-100%); }
-  100% { transform: translateX(100%); }
-}
-
-.progress-job-id {
-  font-size: 11px;
-  color: #a0aec0;
-  margin-top: 6px;
-  text-align: right;
-}
-
 /* ==============================
    Responsive
    ============================== */
 
-@media (max-width: 480px) {
+@media (max-width: 600px) {
   .upload-box {
     padding: 24px;
   }
@@ -417,5 +605,19 @@
     position: static;
     margin-bottom: 8px;
     display: block;
+  }
+
+  .action-buttons {
+    flex-direction: column;
+  }
+
+  .step-label {
+    font-size: 10px;
+  }
+
+  .step-number {
+    width: 30px;
+    height: 30px;
+    font-size: 12px;
   }
 }

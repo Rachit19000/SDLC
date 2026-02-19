@@ -4,15 +4,34 @@ import './RequirementUpload.css';
 
 const BACKEND_URL = 'http://localhost:3001/api/v1';
 
+/**
+ * Multi-step wizard with human-in-the-loop validation:
+ *
+ * Step 1 (UPLOAD):             Upload file or paste text
+ * Step 2 (REVIEW_PARSED):      Review/edit parsed text → Save to GitHub, then Next
+ * Step 3 (REVIEW_REQUIREMENTS): Review/edit structured requirements (FR, NFR, AC) → Save to GitHub
+ * Step 4 (REVIEW_STORIES):     Review/edit generated user stories → Save to GitHub
+ * Step 5 (REVIEW_TECH_SPECS):  Review/edit generated tech specs → Save to GitHub
+ */
+const STEPS = {
+  UPLOAD: 'upload',
+  REVIEW_PARSED: 'review_parsed',
+  REVIEW_REQUIREMENTS: 'review_requirements',
+  REVIEW_STORIES: 'review_stories',
+  REVIEW_TECH_SPECS: 'review_tech_specs',
+};
+
 const RequirementUpload = () => {
   const navigate = useNavigate();
   const location = useLocation();
+
+  // Wizard step
+  const [currentStep, setCurrentStep] = useState(STEPS.UPLOAD);
 
   // Repo selection state
   const [repos, setRepos] = useState([]);
   const [loadingRepos, setLoadingRepos] = useState(true);
   const [selectedRepo, setSelectedRepo] = useState(null);
-  const [showRepoSelector, setShowRepoSelector] = useState(false);
 
   // Try to get repo from route state (if navigated from Dashboard)
   const routeRepoOwner = location.state?.repoOwner;
@@ -28,11 +47,20 @@ const RequirementUpload = () => {
   const dropZoneRef = useRef(null);
   const [isDragging, setIsDragging] = useState(false);
 
-  // Progress tracking state
-  const [showProgress, setShowProgress] = useState(false);
-  const [progress, setProgress] = useState(0);
-  const [stage, setStage] = useState('');
-  const [jobId, setJobId] = useState('');
+  // Review state
+  const [parsedText, setParsedText] = useState('');
+  const [requirementsText, setRequirementsText] = useState('');
+  const [requirementsJson, setRequirementsJson] = useState('');
+  const [userStories, setUserStories] = useState('');
+  const [techSpecs, setTechSpecs] = useState('');
+  const [parsedSaved, setParsedSaved] = useState(false);
+  const [requirementsSaved, setRequirementsSaved] = useState(false);
+  const [storiesSaved, setStoriesSaved] = useState(false);
+  const [techSpecsSaved, setTechSpecsSaved] = useState(false);
+  const [parsedSaveUrl, setParsedSaveUrl] = useState('');
+  const [requirementsSaveUrl, setRequirementsSaveUrl] = useState('');
+  const [storiesSaveUrl, setStoriesSaveUrl] = useState('');
+  const [techSpecsSaveUrl, setTechSpecsSaveUrl] = useState('');
 
   // Fetch user's repos on mount
   useEffect(() => {
@@ -47,7 +75,6 @@ const RequirementUpload = () => {
         setSelectedRepo(repo);
       }
     } else if (repos.length > 0 && !selectedRepo) {
-      // Auto-select first repo if none selected
       setSelectedRepo(repos[0]);
     }
   }, [repos, routeRepoOwner, routeRepoName]);
@@ -128,87 +155,9 @@ const RequirementUpload = () => {
     }
   };
 
-  const pollJobStatus = useCallback(async (jobId, token) => {
-    try {
-      const response = await fetch(`${BACKEND_URL}/jobs/${jobId}`, {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (response.ok) {
-        const data = await response.json();
-        setProgress(data.progress);
-        setStage(data.stage);
-
-        if (data.status === 'COMPLETED') {
-          setLoading(false);
-          setShowProgress(false);
-          let message = `Requirements processed and user stories generated! Uploaded to ${selectedRepo.fullName}.`;
-          if (data.githubFileUrl) {
-            message += `\nView file: ${data.githubFileUrl}`;
-          }
-          setSuccess(message);
-          setFileName('');
-          setPastedText('');
-          if (fileInputRef.current) fileInputRef.current.value = '';
-        } else if (data.status === 'FAILED') {
-          setLoading(false);
-          setShowProgress(false);
-          setError(data.error || 'Processing failed');
-        } else {
-          setTimeout(() => pollJobStatus(jobId, token), 1000);
-        }
-      }
-    } catch (err) {
-      console.error('Poll error:', err);
-      setLoading(false);
-      setShowProgress(false);
-      setError('Failed to check job status');
-    }
-  }, [selectedRepo]);
-
-  const connectSSE = useCallback((jobId, token) => {
-    const eventSource = new EventSource(
-      `${BACKEND_URL}/jobs/${jobId}/progress`
-    );
-
-    eventSource.addEventListener('progress', (event) => {
-      try {
-        const data = JSON.parse(event.data);
-        setProgress(data.progress);
-        setStage(data.stage);
-
-        if (data.status === 'COMPLETED') {
-          eventSource.close();
-          setLoading(false);
-          setShowProgress(false);
-
-          let message = `Requirements processed and user stories generated! Uploaded to ${selectedRepo.fullName}.`;
-          if (data.githubFileUrl) {
-            message += `\nView file: ${data.githubFileUrl}`;
-          }
-          setSuccess(message);
-          setFileName('');
-          setPastedText('');
-          if (fileInputRef.current) fileInputRef.current.value = '';
-        } else if (data.status === 'FAILED') {
-          eventSource.close();
-          setLoading(false);
-          setShowProgress(false);
-          setError(data.error || 'Processing failed');
-        }
-      } catch (err) {
-        console.error('SSE parse error:', err);
-      }
-    });
-
-    eventSource.onerror = () => {
-      eventSource.close();
-      console.warn('SSE connection lost. Falling back to polling...');
-      setTimeout(() => pollJobStatus(jobId, token), 1000);
-    };
-
-    return eventSource;
-  }, [pollJobStatus, selectedRepo]);
-
+  // ==========================================
+  //  Step 1: Parse file or accept pasted text
+  // ==========================================
   const handleUpload = async () => {
     if (!selectedRepo) {
       setError('Please select a repository first');
@@ -218,23 +167,16 @@ const RequirementUpload = () => {
     setError('');
     setSuccess('');
     setLoading(true);
-    setProgress(0);
-    setStage('');
-    setShowProgress(false);
 
     try {
       const token = localStorage.getItem('auth_token');
-
       if (!token) {
-        localStorage.removeItem('auth_token');
-        localStorage.removeItem('user');
         navigate('/', { replace: true });
         return;
       }
 
-      let response;
-
       if (uploadMethod === 'file') {
+        // Parse the file via backend
         const file = fileInputRef.current?.files[0];
         if (!file) {
           throw new Error('Please select a file');
@@ -242,78 +184,574 @@ const RequirementUpload = () => {
 
         const formData = new FormData();
         formData.append('file', file);
-        formData.append('name', file.name);
-        formData.append('repoOwner', selectedRepo.owner);
-        formData.append('repoName', selectedRepo.name);
 
-        response = await fetch(`${BACKEND_URL}/requirements/upload`, {
+        const response = await fetch(`${BACKEND_URL}/requirements/parse`, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${token}`,
           },
           body: formData,
         });
+
+        if (response.status === 401) {
+          handleAuthError(response);
+          return;
+        }
+
+        if (!response.ok) {
+          let errorMsg = `Server returned ${response.status} ${response.statusText}`;
+          try {
+            const data = await response.json();
+            errorMsg = data.error?.message || data.message || data.error || errorMsg;
+          } catch (jsonErr) {
+            const text = await response.text();
+            errorMsg = text || errorMsg;
+          }
+          throw new Error(errorMsg);
+        }
+
+        let data;
+        try {
+          data = await response.json();
+        } catch (jsonErr) {
+          const text = await response.text();
+          throw new Error(`Invalid response from server: ${text.substring(0, 200)}`);
+        }
+
+        if (!data.parsedText) {
+          throw new Error('Server response missing parsedText field');
+        }
+
+        setParsedText(data.parsedText);
+        setCurrentStep(STEPS.REVIEW_PARSED);
+        setParsedSaved(false);
+        setParsedSaveUrl('');
+
       } else {
+        // For pasted text, just move to review step
         if (!pastedText.trim()) {
           throw new Error('Please paste your requirement text');
         }
-
-        response = await fetch(`${BACKEND_URL}/requirements/paste`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`,
-          },
-          body: JSON.stringify({
-            text: pastedText,
-            name: 'Pasted Requirements',
-            repoOwner: selectedRepo.owner,
-            repoName: selectedRepo.name,
-          }),
-        });
+        setParsedText(pastedText.trim());
+        setCurrentStep(STEPS.REVIEW_PARSED);
+        setParsedSaved(false);
+        setParsedSaveUrl('');
       }
 
+    } catch (err) {
+      if (err.name === 'TypeError' && err.message.includes('fetch')) {
+        setError('Cannot connect to server. Please ensure the backend is running on http://localhost:3001');
+      } else {
+        setError(err.message || 'An unexpected error occurred');
+      }
+      console.error('Error in handleUpload:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ==========================================
+  //  Step 2a: Save parsed text to GitHub
+  // ==========================================
+  const handleSaveParsed = async () => {
+    if (!parsedText.trim()) {
+      setError('Parsed text is empty');
+      return;
+    }
+
+    setError('');
+    setSuccess('');
+    setLoading(true);
+
+    try {
+      const token = localStorage.getItem('auth_token');
+      if (!token) {
+        navigate('/', { replace: true });
+        return;
+      }
+
+      const response = await fetch(`${BACKEND_URL}/requirements/save-to-github`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          text: parsedText,
+          fileName: fileName || 'Pasted_Requirements',
+          repoOwner: selectedRepo.owner,
+          repoName: selectedRepo.name,
+          fileType: 'parsed',
+        }),
+      });
+
       if (response.status === 401) {
-        const data = await response.json().catch(() => ({}));
-        const errMsg = data.error?.message || 'Session expired. Please sign in again.';
-        setError(errMsg);
-        setLoading(false);
-        setTimeout(() => {
-          localStorage.removeItem('auth_token');
-          localStorage.removeItem('user');
-          navigate('/', { replace: true });
-        }, 3000);
+        handleAuthError(response);
         return;
       }
 
       if (!response.ok) {
-        const contentType = response.headers.get('content-type');
-        if (!contentType || !contentType.includes('application/json')) {
-          throw new Error('Backend API is not running. Please start the backend server.');
-        }
-        const data = await response.json();
-        throw new Error(data.error?.message || data.message || 'Upload failed');
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error?.message || 'Failed to save to GitHub');
       }
 
       const data = await response.json();
-      const newJobId = data.jobId;
-      setJobId(newJobId);
-      setShowProgress(true);
-      setStage('Starting...');
-
-      connectSSE(newJobId, token);
+      setParsedSaved(true);
+      setParsedSaveUrl(data.fileUrl || '');
+      setSuccess(`Parsed requirements saved to GitHub!${data.fileUrl ? '\nView file: ' + data.fileUrl : ''}`);
 
     } catch (err) {
-      setError(err.message || 'An error occurred during upload');
+      setError(err.message || 'Failed to save to GitHub');
+    } finally {
       setLoading(false);
-      setShowProgress(false);
     }
+  };
+
+  // ==========================================
+  //  Step 2b: Generate requirements (Next)
+  // ==========================================
+  const handleGenerateRequirements = async () => {
+    if (!parsedText.trim()) {
+      setError('Parsed text is empty');
+      return;
+    }
+
+    setError('');
+    setSuccess('');
+    setLoading(true);
+
+    try {
+      const token = localStorage.getItem('auth_token');
+      if (!token) {
+        navigate('/', { replace: true });
+        return;
+      }
+
+      const response = await fetch(`${BACKEND_URL}/requirements/generate-requirements`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          text: parsedText,
+        }),
+      });
+
+      if (response.status === 401) {
+        handleAuthError(response);
+        return;
+      }
+
+      if (!response.ok) {
+        let errorMsg = `Server returned ${response.status} ${response.statusText}`;
+        try {
+          const data = await response.json();
+          errorMsg = data.error?.message || data.message || data.error || errorMsg;
+        } catch (jsonErr) {
+          const text = await response.text();
+          errorMsg = text || errorMsg;
+        }
+        throw new Error(errorMsg);
+      }
+
+      let data;
+      try {
+        data = await response.json();
+      } catch (jsonErr) {
+        const text = await response.text();
+        throw new Error(`Invalid response from server: ${text.substring(0, 200)}`);
+      }
+
+      if (!data.requirementsText && !data.requirements) {
+        throw new Error('Server response missing requirements data. Response: ' + JSON.stringify(data).substring(0, 200));
+      }
+
+      setRequirementsText(data.requirementsText || JSON.stringify(data.requirements, null, 2));
+      setRequirementsJson(data.requirementsJson || JSON.stringify(data.requirements));
+      setCurrentStep(STEPS.REVIEW_REQUIREMENTS);
+      setRequirementsSaved(false);
+      setRequirementsSaveUrl('');
+      setSuccess('');
+
+    } catch (err) {
+      if (err.name === 'TypeError' && err.message.includes('fetch')) {
+        setError('Cannot connect to server. Please ensure the backend is running on http://localhost:3001');
+      } else {
+        setError(err.message || 'Failed to generate requirements');
+      }
+      console.error('Error generating requirements:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ==========================================
+  //  Step 3a: Save requirements to GitHub
+  // ==========================================
+  const handleSaveRequirements = async () => {
+    if (!requirementsText.trim()) {
+      setError('Requirements text is empty');
+      return;
+    }
+
+    setError('');
+    setSuccess('');
+    setLoading(true);
+
+    try {
+      const token = localStorage.getItem('auth_token');
+      if (!token) {
+        navigate('/', { replace: true });
+        return;
+      }
+
+      const response = await fetch(`${BACKEND_URL}/requirements/save-to-github`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          text: requirementsText,
+          fileName: fileName || 'Pasted_Requirements',
+          repoOwner: selectedRepo.owner,
+          repoName: selectedRepo.name,
+          fileType: 'requirements',
+        }),
+      });
+
+      if (response.status === 401) {
+        handleAuthError(response);
+        return;
+      }
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error?.message || 'Failed to save requirements to GitHub');
+      }
+
+      const data = await response.json();
+      setRequirementsSaved(true);
+      setRequirementsSaveUrl(data.fileUrl || '');
+      setSuccess(`Requirements saved to GitHub!${data.fileUrl ? '\nView file: ' + data.fileUrl : ''}`);
+
+    } catch (err) {
+      setError(err.message || 'Failed to save to GitHub');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ==========================================
+  //  Step 3b: Generate user stories (Next from Requirements)
+  // ==========================================
+  const handleGenerateStories = async () => {
+    if (!requirementsJson && !parsedText.trim()) {
+      setError('No requirements data available');
+      return;
+    }
+
+    setError('');
+    setSuccess('');
+    setLoading(true);
+
+    try {
+      const token = localStorage.getItem('auth_token');
+      if (!token) {
+        navigate('/', { replace: true });
+        return;
+      }
+
+      const body = {};
+      if (requirementsJson) {
+        body.requirementsJson = requirementsJson;
+      } else {
+        body.text = parsedText;
+      }
+
+      const response = await fetch(`${BACKEND_URL}/requirements/generate-stories`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify(body),
+      });
+
+      if (response.status === 401) {
+        handleAuthError(response);
+        return;
+      }
+
+      if (!response.ok) {
+        let errorMsg = `Server returned ${response.status} ${response.statusText}`;
+        try {
+          const data = await response.json();
+          errorMsg = data.error?.message || data.message || data.error || errorMsg;
+        } catch (jsonErr) {
+          const text = await response.text();
+          errorMsg = text || errorMsg;
+        }
+        throw new Error(errorMsg);
+      }
+
+      let data;
+      try {
+        data = await response.json();
+      } catch (jsonErr) {
+        const text = await response.text();
+        throw new Error(`Invalid response from server: ${text.substring(0, 200)}`);
+      }
+
+      if (!data.userStories) {
+        throw new Error('Server response missing userStories field. Response: ' + JSON.stringify(data).substring(0, 200));
+      }
+
+      setUserStories(data.userStories);
+      setCurrentStep(STEPS.REVIEW_STORIES);
+      setStoriesSaved(false);
+      setStoriesSaveUrl('');
+      setSuccess('');
+
+    } catch (err) {
+      if (err.name === 'TypeError' && err.message.includes('fetch')) {
+        setError('Cannot connect to server. Please ensure the backend is running on http://localhost:3001');
+      } else {
+        setError(err.message || 'Failed to generate user stories');
+      }
+      console.error('Error generating user stories:', err);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ==========================================
+  //  Step 4a: Save user stories to GitHub
+  // ==========================================
+  const handleSaveStories = async () => {
+    if (!userStories.trim()) {
+      setError('User stories are empty');
+      return;
+    }
+
+    setError('');
+    setSuccess('');
+    setLoading(true);
+
+    try {
+      const token = localStorage.getItem('auth_token');
+      if (!token) {
+        navigate('/', { replace: true });
+        return;
+      }
+
+      const response = await fetch(`${BACKEND_URL}/requirements/save-to-github`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          text: userStories,
+          fileName: fileName || 'Pasted_Requirements',
+          repoOwner: selectedRepo.owner,
+          repoName: selectedRepo.name,
+          fileType: 'user_stories',
+        }),
+      });
+
+      if (response.status === 401) {
+        handleAuthError(response);
+        return;
+      }
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error?.message || 'Failed to save user stories to GitHub');
+      }
+
+      const data = await response.json();
+      setStoriesSaved(true);
+      setStoriesSaveUrl(data.fileUrl || '');
+      setSuccess(`User stories saved to GitHub!${data.fileUrl ? '\nView file: ' + data.fileUrl : ''}`);
+
+    } catch (err) {
+      setError(err.message || 'Failed to save to GitHub');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ==========================================
+  //  Step 4b: Generate tech specs (Next from Stories)
+  // ==========================================
+  const handleGenerateTechSpecs = async () => {
+    if (!parsedText.trim()) {
+      setError('Parsed text is empty');
+      return;
+    }
+
+    setError('');
+    setSuccess('');
+    setLoading(true);
+
+    try {
+      const token = localStorage.getItem('auth_token');
+      if (!token) {
+        navigate('/', { replace: true });
+        return;
+      }
+
+      const response = await fetch(`${BACKEND_URL}/requirements/generate-tech-specs`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          text: parsedText,
+          userStories: userStories || '',
+        }),
+      });
+
+      if (response.status === 401) {
+        handleAuthError(response);
+        return;
+      }
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error?.message || 'Failed to generate tech specification');
+      }
+
+      const data = await response.json();
+      setTechSpecs(data.techSpec);
+      setCurrentStep(STEPS.REVIEW_TECH_SPECS);
+      setTechSpecsSaved(false);
+      setTechSpecsSaveUrl('');
+      setSuccess('');
+
+    } catch (err) {
+      setError(err.message || 'Failed to generate tech specification');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ==========================================
+  //  Step 5: Save tech specs to GitHub
+  // ==========================================
+  const handleSaveTechSpecs = async () => {
+    if (!techSpecs.trim()) {
+      setError('Tech specification is empty');
+      return;
+    }
+
+    setError('');
+    setSuccess('');
+    setLoading(true);
+
+    try {
+      const token = localStorage.getItem('auth_token');
+      if (!token) {
+        navigate('/', { replace: true });
+        return;
+      }
+
+      const response = await fetch(`${BACKEND_URL}/requirements/save-to-github`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          text: techSpecs,
+          fileName: fileName || 'Pasted_Requirements',
+          repoOwner: selectedRepo.owner,
+          repoName: selectedRepo.name,
+          fileType: 'tech_spec',
+        }),
+      });
+
+      if (response.status === 401) {
+        handleAuthError(response);
+        return;
+      }
+
+      if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data.error?.message || 'Failed to save tech spec to GitHub');
+      }
+
+      const data = await response.json();
+      setTechSpecsSaved(true);
+      setTechSpecsSaveUrl(data.fileUrl || '');
+      setSuccess(`Tech specification saved to GitHub!${data.fileUrl ? '\nView file: ' + data.fileUrl : ''}`);
+
+    } catch (err) {
+      setError(err.message || 'Failed to save to GitHub');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ==========================================
+  //  Helpers
+  // ==========================================
+  const handleAuthError = async (response) => {
+    const data = await response.json().catch(() => ({}));
+    const errMsg = data.error?.message || 'Session expired. Please sign in again.';
+    setError(errMsg);
+    setLoading(false);
+    setTimeout(() => {
+      localStorage.removeItem('auth_token');
+      localStorage.removeItem('user');
+      navigate('/', { replace: true });
+    }, 3000);
   };
 
   const handleBackToDashboard = () => {
     navigate('/dashboard');
   };
 
+  const handleStartOver = () => {
+    setCurrentStep(STEPS.UPLOAD);
+    setParsedText('');
+    setRequirementsText('');
+    setRequirementsJson('');
+    setUserStories('');
+    setTechSpecs('');
+    setPastedText('');
+    setFileName('');
+    setError('');
+    setSuccess('');
+    setParsedSaved(false);
+    setRequirementsSaved(false);
+    setStoriesSaved(false);
+    setTechSpecsSaved(false);
+    setParsedSaveUrl('');
+    setRequirementsSaveUrl('');
+    setStoriesSaveUrl('');
+    setTechSpecsSaveUrl('');
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
+
+  // Step indicator helper
+  const getStepNumber = () => {
+    switch (currentStep) {
+      case STEPS.UPLOAD: return 1;
+      case STEPS.REVIEW_PARSED: return 2;
+      case STEPS.REVIEW_REQUIREMENTS: return 3;
+      case STEPS.REVIEW_STORIES: return 4;
+      case STEPS.REVIEW_TECH_SPECS: return 5;
+      default: return 1;
+    }
+  };
+
+  // ==========================================
+  //  Loading / Empty states
+  // ==========================================
   if (loadingRepos) {
     return (
       <div className="upload-container">
@@ -339,6 +777,9 @@ const RequirementUpload = () => {
     );
   }
 
+  // ==========================================
+  //  Render
+  // ==========================================
   return (
     <div className="upload-container">
       <div className="upload-box">
@@ -354,6 +795,34 @@ const RequirementUpload = () => {
         <h1 className="upload-title">SDLC Automation Platform</h1>
         <p className="upload-subtitle">Upload Your Requirements</p>
 
+        {/* Step Indicator */}
+        <div className="step-indicator">
+          <div className={`step-dot ${getStepNumber() >= 1 ? 'active' : ''} ${getStepNumber() > 1 ? 'completed' : ''}`}>
+            <span className="step-number">{getStepNumber() > 1 ? '✓' : '1'}</span>
+            <span className="step-label">Upload</span>
+          </div>
+          <div className="step-line"></div>
+          <div className={`step-dot ${getStepNumber() >= 2 ? 'active' : ''} ${getStepNumber() > 2 ? 'completed' : ''}`}>
+            <span className="step-number">{getStepNumber() > 2 ? '✓' : '2'}</span>
+            <span className="step-label">Review Text</span>
+          </div>
+          <div className="step-line"></div>
+          <div className={`step-dot ${getStepNumber() >= 3 ? 'active' : ''} ${getStepNumber() > 3 ? 'completed' : ''}`}>
+            <span className="step-number">{getStepNumber() > 3 ? '✓' : '3'}</span>
+            <span className="step-label">Requirements</span>
+          </div>
+          <div className="step-line"></div>
+          <div className={`step-dot ${getStepNumber() >= 4 ? 'active' : ''} ${getStepNumber() > 4 ? 'completed' : ''}`}>
+            <span className="step-number">{getStepNumber() > 4 ? '✓' : '4'}</span>
+            <span className="step-label">User Stories</span>
+          </div>
+          <div className="step-line"></div>
+          <div className={`step-dot ${getStepNumber() >= 5 ? 'active' : ''}`}>
+            <span className="step-number">5</span>
+            <span className="step-label">Tech Specs</span>
+          </div>
+        </div>
+
         {/* Repository Selector */}
         <div className="repo-selector-section">
           <label htmlFor="repo-select" className="repo-select-label">
@@ -368,7 +837,7 @@ const RequirementUpload = () => {
               setSelectedRepo(repo);
             }}
             className="repo-select"
-            disabled={loading}
+            disabled={loading || currentStep !== STEPS.UPLOAD}
           >
             {repos.map((repo) => (
               <option key={repo.id} value={`${repo.owner}/${repo.name}`}>
@@ -386,27 +855,6 @@ const RequirementUpload = () => {
               View on GitHub →
             </a>
           )}
-        </div>
-
-        {/* Method Selection */}
-        <div className="method-selection">
-          <button
-            type="button"
-            className={`method-btn ${uploadMethod === 'file' ? 'active' : ''}`}
-            onClick={() => setUploadMethod('file')}
-            disabled={loading}
-          >
-            📤 Drag & Drop File
-          </button>
-          <span className="method-or">OR</span>
-          <button
-            type="button"
-            className={`method-btn ${uploadMethod === 'paste' ? 'active' : ''}`}
-            onClick={() => setUploadMethod('paste')}
-            disabled={loading}
-          >
-            📝 Paste Text
-          </button>
         </div>
 
         {/* Error Message */}
@@ -432,79 +880,374 @@ const RequirementUpload = () => {
           </div>
         )}
 
-        {/* Progress Bar */}
-        {showProgress && (
-          <div className="progress-section">
-            <div className="progress-header">
-              <span className="progress-stage">{stage}</span>
-              <span className="progress-percent">{progress}%</span>
+        {/* ========================== STEP 1: UPLOAD ========================== */}
+        {currentStep === STEPS.UPLOAD && (
+          <>
+            {/* Method Selection */}
+            <div className="method-selection">
+              <button
+                type="button"
+                className={`method-btn ${uploadMethod === 'file' ? 'active' : ''}`}
+                onClick={() => setUploadMethod('file')}
+                disabled={loading}
+              >
+                📤 Drag & Drop File
+              </button>
+              <span className="method-or">OR</span>
+              <button
+                type="button"
+                className={`method-btn ${uploadMethod === 'paste' ? 'active' : ''}`}
+                onClick={() => setUploadMethod('paste')}
+                disabled={loading}
+              >
+                📝 Paste Text
+              </button>
             </div>
-            <div className="progress-bar-track">
+
+            {/* File Upload Section */}
+            {uploadMethod === 'file' && (
               <div
-                className="progress-bar-fill"
-                style={{ width: `${progress}%` }}
+                ref={dropZoneRef}
+                className={`drop-zone ${isDragging ? 'dragging' : ''}`}
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".pdf,.docx,.txt"
+                  onChange={handleFileSelect}
+                  className="file-input"
+                  style={{ display: 'none' }}
+                />
+                <div className="drop-zone-content">
+                  <div className="drop-icon">📄</div>
+                  <p className="drop-text">
+                    {fileName ? fileName : 'Drag file here or click to browse'}
+                  </p>
+                  <p className="drop-hint">Supports PDF, DOCX, TXT files</p>
+                </div>
+              </div>
+            )}
+
+            {/* Paste Text Section */}
+            {uploadMethod === 'paste' && (
+              <div className="paste-section">
+                <label htmlFor="pastedText" className="paste-label">
+                  Paste your requirement text here:
+                </label>
+                <textarea
+                  id="pastedText"
+                  value={pastedText}
+                  onChange={(e) => setPastedText(e.target.value)}
+                  className="paste-textarea"
+                  placeholder="Paste your requirements here..."
+                  rows="10"
+                  disabled={loading}
+                />
+              </div>
+            )}
+
+            {/* Upload Button */}
+            <button
+              type="button"
+              onClick={handleUpload}
+              disabled={loading || !selectedRepo || (uploadMethod === 'file' && !fileName) || (uploadMethod === 'paste' && !pastedText.trim())}
+              className="upload-button"
+            >
+              {loading ? (
+                <span className="btn-loading">
+                  <span className="spinner"></span> Parsing...
+                </span>
+              ) : (
+                'Upload & Parse'
+              )}
+            </button>
+          </>
+        )}
+
+        {/* ========================== STEP 2: REVIEW PARSED TEXT ========================== */}
+        {currentStep === STEPS.REVIEW_PARSED && (
+          <>
+            <div className="review-section">
+              <div className="review-header">
+                <label className="review-label">
+                  📝 Review & Edit Parsed Requirements
+                </label>
+                <span className="review-char-count">
+                  {parsedText.length} characters
+                </span>
+              </div>
+              <textarea
+                value={parsedText}
+                onChange={(e) => {
+                  setParsedText(e.target.value);
+                  setParsedSaved(false);
+                }}
+                className="review-textarea"
+                rows="14"
+                disabled={loading}
+                placeholder="Parsed requirements text..."
               />
             </div>
-            <p className="progress-job-id">Job: {jobId}</p>
-          </div>
-        )}
 
-        {/* File Upload Section */}
-        {uploadMethod === 'file' && !showProgress && (
-          <div
-            ref={dropZoneRef}
-            className={`drop-zone ${isDragging ? 'dragging' : ''}`}
-            onDragOver={handleDragOver}
-            onDragLeave={handleDragLeave}
-            onDrop={handleDrop}
-            onClick={() => fileInputRef.current?.click()}
-          >
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".pdf,.docx,.txt"
-              onChange={handleFileSelect}
-              className="file-input"
-              style={{ display: 'none' }}
-            />
-            <div className="drop-zone-content">
-              <div className="drop-icon">📄</div>
-              <p className="drop-text">
-                {fileName ? fileName : 'Drag file here or click to browse'}
-              </p>
-              <p className="drop-hint">Supports PDF, DOCX, TXT files</p>
+            <div className="action-buttons">
+              <button
+                type="button"
+                onClick={handleSaveParsed}
+                disabled={loading || !parsedText.trim()}
+                className={`save-btn ${parsedSaved ? 'saved' : ''}`}
+              >
+                {loading && !parsedSaved ? (
+                  <span className="btn-loading">
+                    <span className="spinner"></span> Saving...
+                  </span>
+                ) : parsedSaved ? (
+                  '✓ Saved to GitHub'
+                ) : (
+                  '💾 Save to GitHub'
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={handleGenerateRequirements}
+                disabled={loading || !parsedText.trim()}
+                className="next-btn"
+              >
+                {loading ? (
+                  <span className="btn-loading">
+                    <span className="spinner"></span> Generating Requirements...
+                  </span>
+                ) : (
+                  'Next → Generate Requirements'
+                )}
+              </button>
             </div>
-          </div>
-        )}
 
-        {/* Paste Text Section */}
-        {uploadMethod === 'paste' && !showProgress && (
-          <div className="paste-section">
-            <label htmlFor="pastedText" className="paste-label">
-              Paste your requirement text here:
-            </label>
-            <textarea
-              id="pastedText"
-              value={pastedText}
-              onChange={(e) => setPastedText(e.target.value)}
-              className="paste-textarea"
-              placeholder="Paste your requirements here..."
-              rows="10"
+            <button
+              type="button"
+              onClick={handleStartOver}
+              className="start-over-btn"
               disabled={loading}
-            />
-          </div>
+            >
+              ← Start Over
+            </button>
+          </>
         )}
 
-        {/* Upload Button */}
-        {!showProgress && (
-          <button
-            type="button"
-            onClick={handleUpload}
-            disabled={loading || !selectedRepo || (uploadMethod === 'file' && !fileName) || (uploadMethod === 'paste' && !pastedText.trim())}
-            className="upload-button"
-          >
-            {loading ? 'Processing...' : 'Upload'}
-          </button>
+        {/* ========================== STEP 3: REVIEW REQUIREMENTS ========================== */}
+        {currentStep === STEPS.REVIEW_REQUIREMENTS && (
+          <>
+            <div className="review-section">
+              <div className="review-header">
+                <label className="review-label">
+                  📋 Review & Edit Requirements (FR, NFR, AC)
+                </label>
+                <span className="review-char-count">
+                  {requirementsText.length} characters
+                </span>
+              </div>
+              <textarea
+                value={requirementsText}
+                onChange={(e) => {
+                  setRequirementsText(e.target.value);
+                  setRequirementsSaved(false);
+                }}
+                className="review-textarea"
+                rows="14"
+                disabled={loading}
+                placeholder="Generated requirements..."
+              />
+            </div>
+
+            <div className="action-buttons">
+              <button
+                type="button"
+                onClick={handleSaveRequirements}
+                disabled={loading || !requirementsText.trim()}
+                className={`save-btn ${requirementsSaved ? 'saved' : ''}`}
+              >
+                {loading && !requirementsSaved ? (
+                  <span className="btn-loading">
+                    <span className="spinner"></span> Saving...
+                  </span>
+                ) : requirementsSaved ? (
+                  '✓ Saved to GitHub'
+                ) : (
+                  '💾 Save Requirements to GitHub'
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={handleGenerateStories}
+                disabled={loading || (!requirementsJson && !parsedText.trim())}
+                className="next-btn"
+              >
+                {loading ? (
+                  <span className="btn-loading">
+                    <span className="spinner"></span> Generating User Stories...
+                  </span>
+                ) : (
+                  'Next → Generate User Stories'
+                )}
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                setCurrentStep(STEPS.REVIEW_PARSED);
+                setError('');
+                setSuccess('');
+              }}
+              className="start-over-btn"
+              disabled={loading}
+            >
+              ← Back to Parsed Text
+            </button>
+          </>
+        )}
+
+        {/* ========================== STEP 4: REVIEW USER STORIES ========================== */}
+        {currentStep === STEPS.REVIEW_STORIES && (
+          <>
+            <div className="review-section">
+              <div className="review-header">
+                <label className="review-label">
+                  📋 Review & Edit User Stories
+                </label>
+                <span className="review-char-count">
+                  {userStories.length} characters
+                </span>
+              </div>
+              <textarea
+                value={userStories}
+                onChange={(e) => {
+                  setUserStories(e.target.value);
+                  setStoriesSaved(false);
+                }}
+                className="review-textarea"
+                rows="14"
+                disabled={loading}
+                placeholder="Generated user stories..."
+              />
+            </div>
+
+            <div className="action-buttons">
+              <button
+                type="button"
+                onClick={handleSaveStories}
+                disabled={loading || !userStories.trim()}
+                className={`save-btn ${storiesSaved ? 'saved' : ''}`}
+              >
+                {loading && !storiesSaved ? (
+                  <span className="btn-loading">
+                    <span className="spinner"></span> Saving...
+                  </span>
+                ) : storiesSaved ? (
+                  '✓ Saved to GitHub'
+                ) : (
+                  '💾 Save User Stories to GitHub'
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={handleGenerateTechSpecs}
+                disabled={loading || !parsedText.trim()}
+                className="next-btn"
+              >
+                {loading ? (
+                  <span className="btn-loading">
+                    <span className="spinner"></span> Generating Tech Specs...
+                  </span>
+                ) : (
+                  'Next → Generate Tech Specs'
+                )}
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                setCurrentStep(STEPS.REVIEW_REQUIREMENTS);
+                setError('');
+                setSuccess('');
+              }}
+              className="start-over-btn"
+              disabled={loading}
+            >
+              ← Back to Requirements
+            </button>
+          </>
+        )}
+
+        {/* ========================== STEP 5: REVIEW TECH SPECS ========================== */}
+        {currentStep === STEPS.REVIEW_TECH_SPECS && (
+          <>
+            <div className="review-section">
+              <div className="review-header">
+                <label className="review-label">
+                  🏗️ Review & Edit Technical Specification
+                </label>
+                <span className="review-char-count">
+                  {techSpecs.length} characters
+                </span>
+              </div>
+              <textarea
+                value={techSpecs}
+                onChange={(e) => {
+                  setTechSpecs(e.target.value);
+                  setTechSpecsSaved(false);
+                }}
+                className="review-textarea"
+                rows="14"
+                disabled={loading}
+                placeholder="Generated technical specification..."
+              />
+            </div>
+
+            <div className="action-buttons">
+              <button
+                type="button"
+                onClick={handleSaveTechSpecs}
+                disabled={loading || !techSpecs.trim()}
+                className={`save-btn ${techSpecsSaved ? 'saved' : ''}`}
+              >
+                {loading && !techSpecsSaved ? (
+                  <span className="btn-loading">
+                    <span className="spinner"></span> Saving...
+                  </span>
+                ) : techSpecsSaved ? (
+                  '✓ Saved to GitHub'
+                ) : (
+                  '💾 Save Tech Spec to GitHub'
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={handleStartOver}
+                disabled={loading}
+                className="next-btn"
+              >
+                🔄 Start New Requirement
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => {
+                setCurrentStep(STEPS.REVIEW_STORIES);
+                setError('');
+                setSuccess('');
+              }}
+              className="start-over-btn"
+              disabled={loading}
+            >
+              ← Back to User Stories
+            </button>
+          </>
         )}
       </div>
     </div>

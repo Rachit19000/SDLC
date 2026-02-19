@@ -86,21 +86,52 @@ public class DocumentIngestionService {
                     "Text extracted (" + extractedText.length() + " characters)");
             Thread.sleep(300);
 
-            // Stage 5: Generating user stories via agent (60%)
-            jobService.updateProgress(jobId, 60, "Generating user stories from requirements");
+            // Stage 5: Generating structured requirements via user-req-agent (55%)
+            jobService.updateProgress(jobId, 55, "Generating structured requirements (FR, NFR, AC)");
+            String requirementsJson = null;
+            String requirementsText = null;
+            try {
+                java.util.Map<String, Object> reqResult = mcpAgentService.generateRequirements(extractedText, jobId);
+                if (reqResult.containsKey("requirements")) {
+                    requirementsJson = new com.fasterxml.jackson.databind.ObjectMapper()
+                            .writeValueAsString(reqResult.get("requirements"));
+                }
+                if (reqResult.containsKey("requirements_text")) {
+                    requirementsText = (String) reqResult.get("requirements_text");
+                }
+                log.info("Requirements generated successfully for job: {}", jobId);
+                jobService.updateProgress(jobId, 58, "Requirements generated");
+            } catch (Exception e) {
+                log.warn("Failed to generate requirements for job {}: {}. Continuing with parsed text only.",
+                    jobId, e.getMessage());
+            }
+
+            // Stage 5b: Generating user stories via user-stories-agent (58%)
+            jobService.updateProgress(jobId, 58, "Generating user stories from requirements");
             String userStories = null;
             try {
-                userStories = mcpAgentService.generateUserStories(extractedText, jobId);
+                String input = requirementsJson != null ? requirementsJson : extractedText;
+                userStories = mcpAgentService.generateUserStories(input, jobId);
                 log.info("User stories generated successfully for job: {}", jobId);
-                jobService.updateProgress(jobId, 70, "User stories generated (" + 
-                    (userStories.length() > 100 ? userStories.substring(0, 100) + "..." : userStories.length() + " chars") + ")");
+                jobService.updateProgress(jobId, 62, "User stories generated");
             } catch (Exception e) {
                 log.warn("Failed to generate user stories for job {}: {}. Continuing with parsed text only.", 
                     jobId, e.getMessage());
-                // Continue with just parsed text if agent fails
             }
 
-            // Stage 6: Preparing for upload (75%)
+            // Stage 6: Generating tech specs via agent (65%)
+            jobService.updateProgress(jobId, 65, "Generating technical specification");
+            String techSpec = null;
+            try {
+                techSpec = mcpAgentService.generateTechSpecs(extractedText, userStories, jobId);
+                log.info("Tech spec generated successfully for job: {}", jobId);
+                jobService.updateProgress(jobId, 72, "Tech specification generated");
+            } catch (Exception e) {
+                log.warn("Failed to generate tech spec for job {}: {}. Continuing without tech spec.",
+                    jobId, e.getMessage());
+            }
+
+            // Stage 7: Preparing for upload (75%)
             jobService.updateProgress(jobId, 75, "Preparing for GitHub upload");
 
             // Build file paths and commit message
@@ -110,20 +141,34 @@ public class DocumentIngestionService {
             String parsedFileName = baseFileName + "_parsed.md";
             String parsedFilePath = "requirements/" + jobId + "/" + parsedFileName;
             
-            // Upload parsed text first
             String commitMessage = "Add parsed requirement: " + originalFileName
                     + " (Job: " + jobId + ") - " + extractedText.length() + " characters";
 
-            // Stage 7: Uploading parsed text to GitHub (80%)
-            jobService.updateProgress(jobId, 80, "Uploading parsed text to " + repoOwner + "/" + repoName);
+            // Stage 8: Uploading parsed text to GitHub (78%)
+            jobService.updateProgress(jobId, 78, "Uploading parsed text to " + repoOwner + "/" + repoName);
 
-            // Upload parsed text using user's OAuth token to their SELECTED repo
             UserGitHubUploadService.UploadResult parsedResult = userGitHubUploadService.uploadFile(
                     githubAccessToken, repoOwner, repoName, parsedFilePath, extractedText, commitMessage);
 
+            // Upload requirements if generated
+            if (requirementsText != null && !requirementsText.trim().isEmpty()) {
+                jobService.updateProgress(jobId, 81, "Uploading requirements to GitHub");
+                String reqFileName = baseFileName + "_requirements.md";
+                String reqFilePath = "requirements/" + jobId + "/" + reqFileName;
+                String reqCommitMessage = "Add requirements: " + reqFileName + " (Job: " + jobId + ")";
+                
+                try {
+                    UserGitHubUploadService.UploadResult reqResult = userGitHubUploadService.uploadFile(
+                            githubAccessToken, repoOwner, repoName, reqFilePath, requirementsText, reqCommitMessage);
+                    log.info("Requirements uploaded to: {}", reqResult.getFileUrl());
+                } catch (Exception e) {
+                    log.warn("Failed to upload requirements: {}", e.getMessage());
+                }
+            }
+
             // Upload user stories if generated
             if (userStories != null && !userStories.trim().isEmpty()) {
-                jobService.updateProgress(jobId, 85, "Uploading user stories to GitHub");
+                jobService.updateProgress(jobId, 83, "Uploading user stories to GitHub");
                 String storiesFileName = baseFileName + "_user_stories.md";
                 String storiesFilePath = "requirements/" + jobId + "/" + storiesFileName;
                 String storiesCommitMessage = "Add user stories: " + storiesFileName + " (Job: " + jobId + ")";
@@ -134,15 +179,30 @@ public class DocumentIngestionService {
                     log.info("User stories uploaded to: {}", storiesResult.getFileUrl());
                 } catch (Exception e) {
                     log.warn("Failed to upload user stories: {}", e.getMessage());
-                    // Continue even if stories upload fails
                 }
             }
 
-            // Stage 8: Finalizing (95%)
+            // Upload tech spec if generated
+            if (techSpec != null && !techSpec.trim().isEmpty()) {
+                jobService.updateProgress(jobId, 88, "Uploading tech specification to GitHub");
+                String specFileName = baseFileName + "_tech_spec.md";
+                String specFilePath = "requirements/" + jobId + "/" + specFileName;
+                String specCommitMessage = "Add tech specification: " + specFileName + " (Job: " + jobId + ")";
+                
+                try {
+                    UserGitHubUploadService.UploadResult specResult = userGitHubUploadService.uploadFile(
+                            githubAccessToken, repoOwner, repoName, specFilePath, techSpec, specCommitMessage);
+                    log.info("Tech spec uploaded to: {}", specResult.getFileUrl());
+                } catch (Exception e) {
+                    log.warn("Failed to upload tech spec: {}", e.getMessage());
+                }
+            }
+
+            // Stage 9: Finalizing (95%)
             jobService.updateProgress(jobId, 95, "Finalizing");
             Thread.sleep(300);
 
-            // Stage 9: Complete (100%)
+            // Stage 10: Complete (100%)
             jobService.completeJob(jobId, parsedResult.getFileUrl());
 
         } catch (Exception e) {
@@ -195,23 +255,56 @@ public class DocumentIngestionService {
                     "Text processed (" + cleanedText.length() + " characters)");
             Thread.sleep(300);
 
-            // Stage 4: Generating user stories via requirements agent (40%)
-            jobService.updateProgress(jobId, 40, "Generating user stories from requirements");
+            // Stage 4: Generating structured requirements via user-req-agent (40%)
+            jobService.updateProgress(jobId, 40, "Generating structured requirements (FR, NFR, AC)");
+            String requirementsJson = null;
+            String requirementsText = null;
+            try {
+                java.util.Map<String, Object> reqResult = mcpAgentService.generateRequirements(cleanedText, jobId);
+                if (reqResult.containsKey("requirements")) {
+                    requirementsJson = new com.fasterxml.jackson.databind.ObjectMapper()
+                            .writeValueAsString(reqResult.get("requirements"));
+                }
+                if (reqResult.containsKey("requirements_text")) {
+                    requirementsText = (String) reqResult.get("requirements_text");
+                }
+                log.info("Requirements generated successfully for job: {}", jobId);
+                jobService.updateProgress(jobId, 45, "Requirements generated");
+            } catch (Exception e) {
+                log.warn("Failed to generate requirements for job {}: {}. Continuing with parsed text only.",
+                    jobId, e.getMessage());
+                jobService.updateProgress(jobId, 45, "Requirements generation skipped (agent unavailable)");
+            }
+
+            // Stage 4b: Generating user stories via user-stories-agent (45%)
+            jobService.updateProgress(jobId, 45, "Generating user stories from requirements");
             String userStories = null;
             try {
-                userStories = mcpAgentService.generateUserStories(cleanedText, jobId);
+                String input = requirementsJson != null ? requirementsJson : cleanedText;
+                userStories = mcpAgentService.generateUserStories(input, jobId);
                 log.info("User stories generated successfully for job: {}", jobId);
-                jobService.updateProgress(jobId, 60, "User stories generated (" +
-                    (userStories.length() > 100 ? userStories.substring(0, 100) + "..." : userStories.length() + " chars") + ")");
+                jobService.updateProgress(jobId, 50, "User stories generated");
             } catch (Exception e) {
                 log.warn("Failed to generate user stories for job {}: {}. Continuing with parsed text only.",
                     jobId, e.getMessage());
-                jobService.updateProgress(jobId, 60, "User story generation skipped (agent unavailable)");
-                // Continue with just parsed text if agent fails
+                jobService.updateProgress(jobId, 50, "User story generation skipped (agent unavailable)");
             }
 
-            // Stage 5: Preparing for upload (65%)
-            jobService.updateProgress(jobId, 65, "Preparing for GitHub upload");
+            // Stage 5: Generating tech specs via agent (55%)
+            jobService.updateProgress(jobId, 55, "Generating technical specification");
+            String techSpec = null;
+            try {
+                techSpec = mcpAgentService.generateTechSpecs(cleanedText, userStories, jobId);
+                log.info("Tech spec generated successfully for job: {}", jobId);
+                jobService.updateProgress(jobId, 65, "Tech specification generated");
+            } catch (Exception e) {
+                log.warn("Failed to generate tech spec for job {}: {}. Continuing without tech spec.",
+                    jobId, e.getMessage());
+                jobService.updateProgress(jobId, 65, "Tech spec generation skipped (agent unavailable)");
+            }
+
+            // Stage 6: Preparing for upload (70%)
+            jobService.updateProgress(jobId, 70, "Preparing for GitHub upload");
 
             String baseFileName = (name != null && !name.isEmpty())
                     ? name.replaceAll("[^a-zA-Z0-9._\\-]", "_")
@@ -220,15 +313,31 @@ public class DocumentIngestionService {
             String parsedFilePath = "requirements/" + jobId + "/" + parsedFileName;
             String commitMessage = "Add requirement text: " + parsedFileName + " (Job: " + jobId + ") - " + cleanedText.length() + " characters";
 
-            // Stage 6: Uploading parsed text to GitHub (75%)
+            // Stage 7: Uploading parsed text to GitHub (75%)
             jobService.updateProgress(jobId, 75, "Uploading parsed text to " + repoOwner + "/" + repoName);
 
             UserGitHubUploadService.UploadResult parsedResult = userGitHubUploadService.uploadFile(
                     githubAccessToken, repoOwner, repoName, parsedFilePath, cleanedText, commitMessage);
 
-            // Stage 7: Upload user stories if generated (85%)
+            // Stage 7b: Upload requirements if generated (78%)
+            if (requirementsText != null && !requirementsText.trim().isEmpty()) {
+                jobService.updateProgress(jobId, 78, "Uploading requirements to GitHub");
+                String reqFileName = baseFileName + "_requirements.md";
+                String reqFilePath = "requirements/" + jobId + "/" + reqFileName;
+                String reqCommitMessage = "Add requirements: " + reqFileName + " (Job: " + jobId + ")";
+
+                try {
+                    UserGitHubUploadService.UploadResult reqResult = userGitHubUploadService.uploadFile(
+                            githubAccessToken, repoOwner, repoName, reqFilePath, requirementsText, reqCommitMessage);
+                    log.info("Requirements uploaded to: {}", reqResult.getFileUrl());
+                } catch (Exception e) {
+                    log.warn("Failed to upload requirements: {}", e.getMessage());
+                }
+            }
+
+            // Stage 8: Upload user stories if generated (80%)
             if (userStories != null && !userStories.trim().isEmpty()) {
-                jobService.updateProgress(jobId, 85, "Uploading user stories to GitHub");
+                jobService.updateProgress(jobId, 80, "Uploading user stories to GitHub");
                 String storiesFileName = baseFileName + "_user_stories.md";
                 String storiesFilePath = "requirements/" + jobId + "/" + storiesFileName;
                 String storiesCommitMessage = "Add user stories: " + storiesFileName + " (Job: " + jobId + ")";
@@ -239,15 +348,30 @@ public class DocumentIngestionService {
                     log.info("User stories uploaded to: {}", storiesResult.getFileUrl());
                 } catch (Exception e) {
                     log.warn("Failed to upload user stories: {}", e.getMessage());
-                    // Continue even if stories upload fails
                 }
             }
 
-            // Stage 8: Finalizing (95%)
+            // Stage 9: Upload tech spec if generated (87%)
+            if (techSpec != null && !techSpec.trim().isEmpty()) {
+                jobService.updateProgress(jobId, 87, "Uploading tech specification to GitHub");
+                String specFileName = baseFileName + "_tech_spec.md";
+                String specFilePath = "requirements/" + jobId + "/" + specFileName;
+                String specCommitMessage = "Add tech specification: " + specFileName + " (Job: " + jobId + ")";
+
+                try {
+                    UserGitHubUploadService.UploadResult specResult = userGitHubUploadService.uploadFile(
+                            githubAccessToken, repoOwner, repoName, specFilePath, techSpec, specCommitMessage);
+                    log.info("Tech spec uploaded to: {}", specResult.getFileUrl());
+                } catch (Exception e) {
+                    log.warn("Failed to upload tech spec: {}", e.getMessage());
+                }
+            }
+
+            // Stage 10: Finalizing (95%)
             jobService.updateProgress(jobId, 95, "Finalizing");
             Thread.sleep(300);
 
-            // Stage 9: Complete (100%)
+            // Stage 11: Complete (100%)
             jobService.completeJob(jobId, parsedResult.getFileUrl());
 
         } catch (Exception e) {

@@ -3,6 +3,14 @@ agents:
     path: ../agents/text_extraction
     entry: server.py
 
-  requirements-agent:
-    path: ../agents/requirements_agent
+  user-req-agent:
+    path: ../agents/user_req_agent
+    entry: server.py
+
+  user-stories-agent:
+    path: ../agents/user_stories_agent
+    entry: server.py
+
+  tech-specs-agent:
+    path: ../agents/tech_specs_agent
     entry: server.py

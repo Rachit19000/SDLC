@@ -1,0 +1,5 @@
+# AI-Driven SDLC Automation Platform 
+
+• Designed an AI-driven SDLC automation platform that transforms raw requirements documents into complete software development artifacts using specialized LangGraph agents with automatic Pydantic validation, generating work breakdown structures, user stories with acceptance criteria, technical specifications, non-functional requirements, deployment architectures, sprint plans, test scenarios, and workspace structures
+
+• Implemented an intelligent agent orchestration system with MCP host communication via stdin/stdout, featuring 10 specialized AI agents with semantic validation ensuring every user story has corresponding acceptance criteria and all components have defined responsibilities, built with Java and Spring Boot backend, React frontend, Apache PDFBox and Apache POI for multi-format document parsing, HuggingFace for AI model integration, and GitHub API for version-controlled artifact storage, generating structured Markdown artifacts with commit tracking
