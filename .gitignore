@@ -44,3 +44,36 @@ coverage/
 *.tmp
 *.temp
 .cache/
+
+# Python virtual environments
+venv/
+.venv/
+env/
+**/venv/
+**/.venv/
+
+# Python cache & compiled files
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+.eggs/
+*.egg
+*.dist-info/
+
+# Python tools
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.hypothesis/
+
+# Maven / Java build
+target/
+*.class
+*.jar
+*.war
+
+# Spring Boot
+spring.log

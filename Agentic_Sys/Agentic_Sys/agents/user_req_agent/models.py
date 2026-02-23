@@ -17,14 +17,12 @@ class NonFunctionalRequirement(BaseModel):
 class AcceptanceCriteria(BaseModel):
     id: str
     text: str
-    references: List[str]
+    references: List[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def criteria_must_be_non_empty(self):
         if not self.text or not self.text.strip():
             raise ValueError("Acceptance criteria text must be present and non-empty")
-        if not self.references:
-            raise ValueError("Acceptance criteria must reference at least one FR id")
         return self
 
 
@@ -52,18 +50,11 @@ class RequirementsArtifact(BaseModel):
         if len(fr_ids) != len(self.functional_requirements):
             raise ValueError("Duplicate Functional Requirement ids detected")
 
-        # Validate acceptance criteria references
-        referenced_ids: Set[str] = set()
+        # Validate acceptance criteria references (if provided)
         for ac in self.acceptance_criteria:
             for ref in ac.references:
                 if ref not in fr_ids:
                     raise ValueError(f"Acceptance criteria {ac.id} references unknown FR id: {ref}")
-                referenced_ids.add(ref)
-
-        # Ensure every FR has at least one AC referencing it
-        missing = fr_ids - referenced_ids
-        if missing:
-            raise ValueError(f"Functional requirements missing acceptance criteria: {sorted(list(missing))}")
 
         # Validate NFR list presence (must be present; can be empty list)
         if self.nonfunctional_requirements is None:
