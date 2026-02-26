@@ -1,0 +1,52 @@
+{
+  "requirements/244fcfef/Avni_SmartGovProj_Req_1_parsed.md": {
+    "repo_owner": "Rachit19000",
+    "repo_name": "trial_1",
+    "repo_url": "https://github.com/Rachit19000/trial_1",
+    "branch": "main",
+    "repo_path": "requirements/244fcfef/Avni_SmartGovProj_Req_1_parsed.md",
+    "sha": "681c9436960a84ecae777192d0d458f65485857d",
+    "downloaded_at": "2026-02-26T10:59:31.844593",
+    "local_path": "C:\\Users\\Rachit.Jain\\Documents\\SDLC\\github_docs\\requirements\\244fcfef\\Avni_SmartGovProj_Req_1_parsed.md"
+  },
+  "requirements/868f1e29/Avni_SmartGovProj_Req_1_requirements.md": {
+    "repo_owner": "Rachit19000",
+    "repo_name": "trial_1",
+    "repo_url": "https://github.com/Rachit19000/trial_1",
+    "branch": "main",
+    "repo_path": "requirements/868f1e29/Avni_SmartGovProj_Req_1_requirements.md",
+    "sha": "d4fc8e291b987a8ab00722288496a57639b2efee",
+    "downloaded_at": "2026-02-26T10:59:32.852568",
+    "local_path": "C:\\Users\\Rachit.Jain\\Documents\\SDLC\\github_docs\\requirements\\868f1e29\\Avni_SmartGovProj_Req_1_requirements.md"
+  },
+  "requirements/9f9ebbe8/Avni_SmartGovProj_Req_1_user_stories.md": {
+    "repo_owner": "Rachit19000",
+    "repo_name": "trial_1",
+    "repo_url": "https://github.com/Rachit19000/trial_1",
+    "branch": "main",
+    "repo_path": "requirements/9f9ebbe8/Avni_SmartGovProj_Req_1_user_stories.md",
+    "sha": "00541f70176bac1601621cd123ea2bdae443df16",
+    "downloaded_at": "2026-02-26T10:59:33.931673",
+    "local_path": "C:\\Users\\Rachit.Jain\\Documents\\SDLC\\github_docs\\requirements\\9f9ebbe8\\Avni_SmartGovProj_Req_1_user_stories.md"
+  },
+  "requirements/d0159380/Avni_SmartGovProj_Req_1_tech_spec.md": {
+    "repo_owner": "Rachit19000",
+    "repo_name": "trial_1",
+    "repo_url": "https://github.com/Rachit19000/trial_1",
+    "branch": "main",
+    "repo_path": "requirements/d0159380/Avni_SmartGovProj_Req_1_tech_spec.md",
+    "sha": "e19bcc30655a977a28dfb00b922fc4bfe384a755",
+    "downloaded_at": "2026-02-26T10:59:35.298468",
+    "local_path": "C:\\Users\\Rachit.Jain\\Documents\\SDLC\\github_docs\\requirements\\d0159380\\Avni_SmartGovProj_Req_1_tech_spec.md"
+  },
+  "README.md": {
+    "repo_owner": "Rachit19000",
+    "repo_name": "trial_1",
+    "repo_url": "https://github.com/Rachit19000/trial_1",
+    "branch": "main",
+    "repo_path": "README.md",
+    "sha": "a2fbcfe7f5a86fccc3ab15f8a099a987a600eb40",
+    "downloaded_at": "2026-02-26T10:59:36.514437",
+    "local_path": "C:\\Users\\Rachit.Jain\\Documents\\SDLC\\github_docs\\README.md"
+  }
+}

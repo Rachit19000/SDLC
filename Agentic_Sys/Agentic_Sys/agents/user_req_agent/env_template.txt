@@ -1,0 +1,14 @@
+# GitHub Integration Configuration
+# Copy this content to a .env file in this directory and fill in your values
+
+# GitHub Personal Access Token
+# Create one at: https://github.com/settings/tokens
+# Required permissions: repo (for private repos) or public_repo (for public repos)
+GITHUB_TOKEN=your_github_token_here
+
+# GitHub Repository Details
+GITHUB_REPO_OWNER=your_username_or_org
+GITHUB_REPO_NAME=your_repository_name
+
+# Branch name (optional, defaults to 'main')
+GITHUB_BRANCH=main
